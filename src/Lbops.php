@@ -100,6 +100,13 @@ class Lbops extends Basic
         //将新机器部署
         foreach ($newRegionInsList as $region => $insList) {
             $insIds = array_column($insList, 'ins_id');
+            $ipv4List = array_column($insList, 'ipv4');
+
+            //等待app ready
+            $ret = $this->waitAppReady($ipv4List);
+            if (!$ret) {
+                continue;
+            }
 
             //将新启动的ec2部署到aga中
             if ($this->config['aga_arns']) {
@@ -333,6 +340,12 @@ class Lbops extends Basic
             $insList[] = $insData;
         }
 
+        //等待app ready
+        $ret = $this->waitAppReady(array_column($insList, 'ipv4'));
+        if (!$ret) {
+            return false;
+        }
+
         //需要分配新eip
         $newIpList = [];
         $newInsIdList = [];
@@ -532,6 +545,12 @@ class Lbops extends Basic
             $insList[] = $insData;
         }
 
+        //等待app ready
+        $ret = $this->waitAppReady(array_column($insList, 'ipv4'));
+        if (!$ret) {
+            return false;
+        }
+
         if ($this->config['r53_zones']) {
             //用旧eip
             foreach ($r53RegionalNodes as $idx => $rnode) {
@@ -648,6 +667,12 @@ class Lbops extends Basic
             }
 
             $insList[] = $insData;
+        }
+
+        //等待app ready
+        $ret = $this->waitAppReady(array_column($insList, 'ipv4'));
+        if (!$ret) {
+            return false;
         }
 
         if ($this->config['r53_zones']) {

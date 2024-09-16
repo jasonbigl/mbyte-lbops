@@ -135,60 +135,11 @@ class Basic
         $ipv4 = $instanceInfo['PublicIpAddress'];
         $ipv6 = $instanceInfo['Ipv6Address'];
 
-        //wait until app is ready
-        $ret = $this->waitAppReady($ipv4);
-        if (!$ret) {
-            return false;
-        }
-
         return [
             'ins_id' => $instanceId,
             'ipv4' => $ipv4,
             'ipv6' => $ipv6
         ];
-
-        // //关联eip
-        // $allocateId = $EIP = null;
-        // $isNewEIP = false;
-        // if ($assignEIP) {
-        //     //保持原来的eip
-        //     //根据IP找到allocateID
-        //     $allocateId = $this->getAllocateID($region, $assignEIP);
-        //     if (!$allocateId) {
-        //         Log::error("Failed to get allocate id from EIP {$assignEIP}");
-        //         return false;
-        //     }
-
-        //     $EIP = $assignEIP;
-
-        //     $isNewEIP = false;
-        // } else {
-        //     //分配新的EIP
-        //     $ret = $this->allocateNewEIP($region, $version);
-        //     if (!$ret) {
-        //         Log::error("Failed to allocate new EIP");
-        //         $EIP = $ipv4; //用临时IP
-        //     } else {
-        //         list($allocateId, $EIP) = $ret;
-        //     }
-
-        //     $isNewEIP = true;
-        // }
-
-        // //关联机器和IP
-        // if ($allocateId) {
-        //     $ret = $this->associateEIP($region, $instanceId, $allocateId);
-        //     if (!$ret) {
-        //         Log::error("Failed to associate EIP {$EIP} with instance {$instanceId}");
-        //         $EIP = $ipv4; //用临时IP
-        //     }
-        // }
-
-        // return [
-        //     'instanceId' => $instanceId,
-        //     'eip' => $EIP,
-        //     'is_new_eip' => $isNewEIP
-        // ];
     }
 
     /**
@@ -348,69 +299,82 @@ STRING;
     }
 
     /**
-     * 等待instance中安装nginx和swoole并启动完成
+     * 等待所有instance中的app启动完成
      *
-     * @param [type] $eipv4
+     * @param [type] $ipList
      * @return void
      */
-    public function waitAppReady($eipv4)
+    public function waitAppReady($ipList)
     {
-        Log::info("waiting app to be ready...");
+        Log::info("waiting app to be ready, ips: " . implode(',', $ipList));
 
-        $counter = 1;
-        $httpCode = 0;
-        $body = '';
-        $chInfo = [];
+        $startTime = time();
 
         list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
 
-        do {
-            $ch = curl_init("https://{$healthCheckDomain}/{$healthCheckPath}");
+        //启动完成的nodes
+        $readyNodes = [];
 
-            curl_setopt_array($ch, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS => 3,
-                CURLOPT_HEADER => false,
-                CURLOPT_FORBID_REUSE => false,
-                CURLOPT_TIMEOUT => 5,
-                CURLOPT_FAILONERROR => false, //ignore http status code
-                CURLOPT_RESOLVE => ["{$healthCheckDomain}:443:{$eipv4}"]
-            ]);
+        foreach ($ipList as $ip) {
+            $checkAttempts = 0;
 
-            try {
-                $body = curl_exec($ch);
-            } catch (\Exception $e) {
+            do {
+                $ch = curl_init("https://{$healthCheckDomain}/{$healthCheckPath}");
+
+                curl_setopt_array($ch, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS => 3,
+                    CURLOPT_HEADER => false,
+                    CURLOPT_FORBID_REUSE => false,
+                    CURLOPT_TIMEOUT => 5,
+                    CURLOPT_FAILONERROR => false, //ignore http status code
+                    CURLOPT_RESOLVE => ["{$healthCheckDomain}:443:{$ip}"]
+                ]);
+
+                try {
+                    $body = curl_exec($ch);
+                } catch (\Exception $e) {
+                    $chInfo = curl_getinfo($ch);
+                    curl_close($ch);
+                    continue;
+                }
+
+                //有错误产生
+                $errNo = curl_errno($ch);
+                if ($errNo) {
+                    $chInfo = curl_getinfo($ch);
+                    curl_close($ch);
+                    continue;
+                }
+
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 $chInfo = curl_getinfo($ch);
                 curl_close($ch);
-                continue;
-            }
 
-            //有错误产生
-            $errNo = curl_errno($ch);
-            if ($errNo) {
-                $chInfo = curl_getinfo($ch);
-                curl_close($ch);
-                continue;
-            }
+                if ($httpCode === 200) {
+                    //启动完成
+                    $readyNodes[] = $ip;
 
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $chInfo = curl_getinfo($ch);
-            curl_close($ch);
+                    Log::info("app in {$ip} is ready after {$checkAttempts} checks");
 
-            $counter++;
-            sleep(5);
-        } while ($counter <= 30 && $httpCode != 200);
+                    break;
+                }
 
-        if ($httpCode != 200) {
-            Log::error("app in instance is not ready after {$counter} checks, body: " . print_r($body, true) . ", ch info:" . print_r($chInfo, true));
+                $checkAttempts++;
+
+                sleep(5);
+            } while ($checkAttempts <= 30);
+        }
+
+        if (count($readyNodes) != count($ipList)) {
+            Log::error("app in instances is not ready, ready nodes: " . implode(',', $readyNodes) . ", all nodes:" . implode(',', $ipList));
             return false;
         }
 
-        //再等待5s，方便collector完全准备好
-        sleep(5);
+        $timeUsed = time() - $startTime;
 
-        Log::info("app in instance is ready after {$counter} checks");
+        Log::info("app in instances is ready, time used: {$timeUsed}s");
 
         return true;
     }
