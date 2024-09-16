@@ -1,6 +1,7 @@
 {
     "name": "mbyte/lbops",
     "type": "library",
+    "license": "MIT",
     "autoload": {
         "psr-4": {
             "Mbyte\\Lbops\\": "src/"
