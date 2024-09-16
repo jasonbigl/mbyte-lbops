@@ -364,6 +364,7 @@ class Aga extends Abs
             $agaListeners = $this->listListenerArns($agaArn);
             $agaListenerArn = reset($agaListeners);
 
+            //1. 添加
             $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
             if (!$epgInfo) {
                 Log::info("no endpoint group in {$region}, create new one");
@@ -384,17 +385,13 @@ class Aga extends Abs
                 ]);
 
                 Log::info("success to create new endpoint group in {$region}");
-
-                //继续下一个aga
-                continue;
+            } else {
+                $newEndpointConfs = array_merge($epgInfo['EndpointDescriptions'], $newEndpointConfs);
+                $this->client->updateEndpointGroup([
+                    'EndpointConfigurations' => $newEndpointConfs,
+                    'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
+                ]);
             }
-
-            //1. 添加
-            $newEndpointConfs = array_merge($epgInfo['EndpointDescriptions'], $newEndpointConfs);
-            $this->client->updateEndpointGroup([
-                'EndpointConfigurations' => $newEndpointConfs,
-                'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
-            ]);
 
             //2. 等待endpoint全部ready
             Log::info("wait endpoint in aga to be healthy...");

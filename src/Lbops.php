@@ -115,7 +115,10 @@ class Lbops extends Basic
 
             //将新启动的ec2部署到route53中
             if ($this->config['r53_zones']) {
-                if ($allocateNewEIP) {
+
+                $regionNodes = $this->route53->getNodesByRegion($region, true);
+
+                if ($allocateNewEIP || !$regionNodes) {
                     //需要分配新eip
                     $newIpList = [];
                     foreach ($insList as $ins) {
@@ -148,11 +151,6 @@ class Lbops extends Basic
                 } else {
                     //直接用旧的eip重新关联ec2即可，无需更改route53
                     //获取旧eip
-                    $regionNodes = $this->route53->getNodesByRegion($region, true);
-                    if (!$regionNodes) {
-                        continue;
-                    }
-
                     foreach ($regionNodes as $idx => $rnode) {
                         $oldEIP = $rnode['ipv4'];
                         $newInsId = $insList[$idx] ?? null;

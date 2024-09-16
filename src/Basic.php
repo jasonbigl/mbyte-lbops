@@ -332,6 +332,8 @@ STRING;
                     CURLOPT_RESOLVE => ["{$healthCheckDomain}:443:{$ip}"]
                 ]);
 
+                $checkAttempts++;
+
                 try {
                     $body = curl_exec($ch);
                 } catch (\Exception $e) {
@@ -360,8 +362,6 @@ STRING;
 
                     break;
                 }
-
-                $checkAttempts++;
 
                 sleep(5);
             } while ($checkAttempts <= 30);
