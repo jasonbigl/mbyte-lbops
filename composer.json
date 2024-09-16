@@ -1,0 +1,12 @@
+{
+    "name": "mtech/aws-devops",
+    "type": "library",
+    "autoload": {
+        "psr-4": {
+            "Mtech\\AwsDevops\\": "src/"
+        }
+    },
+    "require": {
+        "aws/aws-sdk-php": "^3.321"
+    }
+}
