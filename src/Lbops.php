@@ -736,6 +736,8 @@ class Lbops extends Basic
 
         list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
 
+        Log::info("start monitoring nodes: " . json_encode($regionNodes, JSON_UNESCAPED_SLASHES));
+
         foreach ($regionNodes as $region => $nodeList) {
             foreach ($nodeList as $node) {
                 $nodeIp = $node['ipv4'];
@@ -786,13 +788,20 @@ class Lbops extends Basic
                         $unHealthyRets++;
                     }
 
+                    if ($unHealthyRets >= $failThreshold) {
+                        //认为不健康，跳出循环
+                        break;
+                    }
+
                     sleep($intervalS);
-                } while ($checkAttempts <= 5 || $unHealthyRets >= $failThreshold);
+                } while ($checkAttempts <= 5 && $unHealthyRets < $failThreshold);
 
                 if ($unHealthyRets >= $failThreshold) {
+                    Log::error("Unhealthy node {$node['ins_id']} ({$node['ipv4']}) in {$region}, start scale up");
+
                     //该节点不健康
                     $content = <<<STRING
-<p><strong>{$node['ins_Id']} ({$node['ipv4']}) in {$region} is not healthy</strong><p>
+<p><strong>{$node['ins_id']} ({$node['ipv4']}) in {$region} is not healthy</strong><p>
 <p>Start scale up<p>
 STRING;
                     $this->sendAlarmEmail('Unhealthy node, start scale up', $content);
@@ -801,10 +810,12 @@ STRING;
                     $this->scaleUp($region);
 
                     $content = <<<STRING
-<p><strong>{$node['ins_Id']} ({$node['ipv4']}) in {$region} is not healthy</strong><p>
-<p>Finished scale up<p>
+<p><strong>{$node['ins_id']} ({$node['ipv4']}) in {$region} is not healthy</strong><p>
+<p>End scale up<p>
 STRING;
-                    $this->sendAlarmEmail('Unhealthy node, finished scale up', $content);
+                    $this->sendAlarmEmail('Unhealthy node, end scale up', $content);
+
+                    Log::error("Unhealthy node {$node['ins_id']} ({$node['ipv4']}) in {$region}, end scale up");
                 }
             }
         }
