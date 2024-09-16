@@ -72,7 +72,6 @@ class Basic
             'r53_zones' => [], //需要发布的route53域名区，包含zone_id和domain, 留空表示不发布
 
             'r53_subdomain' => '', // route53中的域名前缀，比如 *.domain.com就是*
-            'new_eip' => false, //是否需要分配新的eip，否则用当前的eip
 
             'loggers' => [], //日志记录
         ];
@@ -637,5 +636,40 @@ STRING;
         }
 
         return true;
+    }
+
+    /**
+     * Undocumented function
+     *
+     * @return boolean
+     */
+    public function opLocked()
+    {
+        if (file_exists('/tmp/mbyte-lbops.lock') && file_get_contents('/tmp/mbyte-lbops.lock') == 'y') {
+            Log::info("lbops has been locked by another operation, skip");
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * lock operation
+     *
+     * @return void
+     */
+    public function lockOp()
+    {
+        file_put_contents('/tmp/mbyte-lbops.lock', 'y');
+    }
+
+    /**
+     * unlock operation
+     *
+     * @return void
+     */
+    public function unlockOp()
+    {
+        file_put_contents('/tmp/mbyte-lbops.lock', 'n');
     }
 }

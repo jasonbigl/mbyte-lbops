@@ -19,6 +19,12 @@ class Lbops extends Basic
      */
     public function deploy($version, $allocateNewEIP = false)
     {
+        if ($this->opLocked()) {
+            return;
+        }
+
+        $this->lockOp();
+
         $startTime = time();
 
         //当前版本和机器类型
@@ -182,6 +188,8 @@ class Lbops extends Basic
 
         $timeUsed = time() - $startTime;
         Log::info("deploy finished, version: {$version}, time used: {$timeUsed}s");
+
+        $this->unlockOp();
     }
 
     /**
@@ -208,6 +216,12 @@ class Lbops extends Basic
                 return;
             }
         }
+
+        if ($this->opLocked()) {
+            return;
+        }
+
+        $this->lockOp();
 
         Log::info("### start clean module `{$this->config['module']}` ###");
         sleep(5);
@@ -302,6 +316,8 @@ class Lbops extends Basic
                 }
             }
         }
+
+        $this->unlockOp();
     }
 
     /**
@@ -326,6 +342,12 @@ class Lbops extends Basic
             $currentVersion = $this->aga->getCurrentVersion();
         }
 
+        if ($this->opLocked()) {
+            return;
+        }
+
+        $this->lockOp();
+
         Log::info("### scale out in region:{$region}, version: {$currentVersion}, amount: {$amount} ###");
         sleep(5);
 
@@ -345,6 +367,7 @@ class Lbops extends Basic
         //等待app ready
         $ret = $this->waitAppReady(array_column($insList, 'ipv4'));
         if (!$ret) {
+            $this->unlockOp();
             return false;
         }
 
@@ -389,6 +412,8 @@ class Lbops extends Basic
         if ($this->config['aga_arns'] && $newInsIdList) {
             $this->aga->addNodes($region, $newInsIdList);
         }
+
+        $this->unlockOp();
     }
 
     /**
@@ -425,6 +450,12 @@ class Lbops extends Basic
             return;
         }
 
+        if ($this->opLocked()) {
+            return;
+        }
+
+        $this->lockOp();
+
         Log::info("remaining nodes in {$region}: " . json_encode($nodesList, JSON_UNESCAPED_SLASHES));
 
         if ($this->config['r53_zones']) {
@@ -459,6 +490,8 @@ class Lbops extends Basic
                 ]);
             }
         }
+
+        $this->unlockOp();
     }
 
     /**
@@ -533,6 +566,12 @@ class Lbops extends Basic
             return;
         }
 
+        if ($this->opLocked()) {
+            return;
+        }
+
+        $this->lockOp();
+
         Log::info("### scale up in region:{$region}, amount: {$amount}, version: {$currentVersion}, current instance type: {$insType}, target instance type: {$targetInsType} ###");
 
         //启动新机器
@@ -550,6 +589,7 @@ class Lbops extends Basic
         //等待app ready
         $ret = $this->waitAppReady(array_column($insList, 'ipv4'));
         if (!$ret) {
+            $this->unlockOp();
             return false;
         }
 
@@ -583,6 +623,8 @@ class Lbops extends Basic
             $insIds = array_column($insList, 'ins_id');
             $this->aga->replaceNodes($region, $insIds);
         }
+
+        $this->unlockOp();
     }
 
     /**
@@ -657,6 +699,12 @@ class Lbops extends Basic
             return;
         }
 
+        if ($this->opLocked()) {
+            return;
+        }
+
+        $this->lockOp();
+
         Log::info("### scale down in region:{$region}, amount: {$amount}, version: {$currentVersion}, current instance type: {$insType}, target instance type: {$targetInsType} ###");
 
         //启动新机器
@@ -674,6 +722,7 @@ class Lbops extends Basic
         //等待app ready
         $ret = $this->waitAppReady(array_column($insList, 'ipv4'));
         if (!$ret) {
+            $this->unlockOp();
             return false;
         }
 
@@ -707,6 +756,8 @@ class Lbops extends Basic
             $insIds = array_column($insList, 'ins_id');
             $this->aga->replaceNodes($region, $insIds);
         }
+
+        $this->unlockOp();
     }
 
     /**
