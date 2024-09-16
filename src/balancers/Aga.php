@@ -279,6 +279,9 @@ class Aga extends Abs
                 break;
             }
         }
+        if (!$regionNodes) {
+            return [];
+        }
 
         $instanceIds = array_column($regionNodes, 'EndpointId');
 

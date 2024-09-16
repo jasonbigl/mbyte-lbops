@@ -230,6 +230,8 @@ class Lbops extends Basic
                     $agaResvIps = array_column($agaResvInsList, 'ipv4');
 
                     Log::info("{$region} aga reserved instances: " . implode(',', $agaResvInsIds) . ', reserved ips: ' . implode(',', $agaResvIps));
+                } else {
+                    Log::info("{$region} aga reserved instances: <empty>, reserved ips: <empty>");
                 }
             }
 
@@ -240,6 +242,8 @@ class Lbops extends Basic
                     $r53ResvIps = array_column($r53ResvInsList, 'ipv4');
 
                     Log::info("{$region} route53 reserved instances: " . implode(',', $r53ResvInsIds) . ', reserved ips: ' . implode(',', $r53ResvIps));
+                } else {
+                    Log::info("{$region} route53 reserved instances: <empty>, reserved ips: <empty>");
                 }
             }
 
