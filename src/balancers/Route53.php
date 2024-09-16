@@ -1,9 +1,9 @@
 <?php
 
-namespace Mtech\AwsDevops\Balancers;
+namespace Mbyte\Lbops\Balancers;
 
 use Aws\Route53\Route53Client;
-use Mtech\AwsDevops\Log;
+use Mbyte\Lbops\Log;
 
 class Route53 extends Abs
 {

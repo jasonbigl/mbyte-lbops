@@ -1,8 +1,8 @@
 <?php
 
-namespace Mtech\AwsDevops;
+namespace Mbyte\Lbops;
 
-class Client extends Basic
+class Lbops extends Basic
 {
     //竖向扩容机器路线
     public $scaleUpInsTypes = [

@@ -1,6 +1,6 @@
 <?php
 
-namespace Mtech\AwsDevops\Balancers;
+namespace Mbyte\Lbops\Balancers;
 
 abstract class Abs
 {

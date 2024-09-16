@@ -1,12 +1,12 @@
 {
-    "name": "mtech/aws-devops",
+    "name": "mbyte/lbops",
     "type": "library",
     "autoload": {
         "psr-4": {
-            "Mtech\\AwsDevops\\": "src/"
+            "Mbyte\\Lbops\\": "src/"
         }
     },
     "require": {
-        "aws/aws-sdk-php": "^3.321"
+        "aws/aws-sdk-php": "*.*.*"
     }
 }
