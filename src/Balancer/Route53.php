@@ -1,6 +1,6 @@
 <?php
 
-namespace Mbyte\Lbops\Balancers;
+namespace Mbyte\Lbops\Balancer;
 
 use Aws\Route53\Route53Client;
 use Mbyte\Lbops\Log;

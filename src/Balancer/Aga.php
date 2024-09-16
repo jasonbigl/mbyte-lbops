@@ -1,6 +1,6 @@
 <?php
 
-namespace Mbyte\Lbops\Balancers;
+namespace Mbyte\Lbops\Balancer;
 
 use Mbyte\Lbops\Log;
 use Aws\GlobalAccelerator\GlobalAcceleratorClient;

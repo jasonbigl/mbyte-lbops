@@ -1,6 +1,6 @@
 <?php
 
-namespace Mbyte\Lbops\Balancers;
+namespace Mbyte\Lbops\Balancer;
 
 abstract class Abs
 {

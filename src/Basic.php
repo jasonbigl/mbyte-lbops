@@ -2,8 +2,8 @@
 
 namespace Mbyte\Lbops;
 
-use Mbyte\Lbops\Balancers\Aga;
-use Mbyte\Lbops\Balancers\Route53;
+use Mbyte\Lbops\Balancer\Aga;
+use Mbyte\Lbops\Balancer\Route53;
 
 class Basic
 {
