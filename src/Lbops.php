@@ -877,51 +877,128 @@ STRING;
     }
 
     /**
-     * 发送健康状况通知邮件
+     * 根据cpu负载自动扩容和缩容
      *
      * @return void
      */
-    public function sendAlarmEmail($subject, $content)
+    public function autoScale()
     {
-        $sesV2Client = new \Aws\SesV2\SesV2Client([
-            'credentials' => [
-                'key' => $this->config['aws_key'],
-                'secret' => $this->config['aws_secret'],
-            ],
-            'http' => [
-                'connect_timeout' => 5,
-                'timeout' => 15,
-                'verify' => false, //Disable SSL/TLS verification
-            ],
-            'retries' => 3,
-            'version' => '2019-09-27',
-            'region' => 'us-east-1'
-        ]);
+        if (!$this->config['auto_scale_cpu_metric'] || !$this->config['auto_scale_cpu_threshold']) {
+            return;
+        }
 
-        $sesV2Client->sendEmail([
-            'Content' => [
-                'Simple' => [
-                    'Body' => [
-                        'Html' => [
-                            'Charset' => 'UTF-8',
-                            'Data' => $content,
+        Log::info("start watching auto scale");
+        $startTime = time();
+
+        if ($this->config['r53_zones']) {
+            //用route53中的ip作为监控目标
+            $regionNodes = $this->route53->getAllNodes(true);
+        } else {
+            //用aga中的ip作为监控目标
+            $regionNodes = $this->aga->getAllNodes(true);
+        }
+
+        $cwClient = new \Aws\CloudWatch\CloudWatchClient(array_merge($this->defaultAwsConfig, [
+            'region' => $this->config['auto_scale_cpu_metric']['region'],
+            'version' => '2010-08-01'
+        ]));
+
+        foreach ($regionNodes as $region => $nodeList) {
+            //该地区总共节点数
+            $totalNodes = count($nodeList);
+
+            //低负载节点
+            $lowLoadNodes = 0;
+
+            $currentCPUTotal = $lastCPUTotal = 0;
+
+            foreach ($nodeList as $node) {
+                $insId = $node['ins_id'];
+
+                //查询该instance的cpu使用情况
+                $nowTs = time();
+                try {
+                    $ret = $cwClient->getMetricStatistics(array_merge($this->config['auto_scale_cpu_metric']['filter'], [
+                        'Dimensions' => [
+                            [
+                                'Name' => 'InstanceId',
+                                'Value' => $insId
+                            ],
                         ],
-                    ],
-                    'Subject' => [
-                        'Charset' => 'UTF-8',
-                        'Data' => $subject,
-                    ],
-                ]
-            ],
-            'Destination' => [
-                'BccAddresses' => [],
-                'CcAddresses' => [],
-                //注意这里只能用单个用户，如果用多个用户，每个用户都能看到其他收件人的地址
-                'ToAddresses' => [
-                    "Mr Lee <maxalarm@foxmail.com>",
-                ],
-            ],
-            'FromEmailAddress' => 'Mtech Alarm <alarm@maxbytech.com>',
-        ]);
+                        'StartTime' => $nowTs - (6 * $this->config['auto_scale_cpu_metric']['filter']['Period']), //最近6个节点数据
+                        'EndTime' => $nowTs,
+                        'Statistics' => ['Average'],
+                        'Unit' => 'Percent'
+                    ]));
+                } catch (\Throwable $th) {
+                    Log::error($th->getMessage());
+                    continue;
+                }
+
+                $dataPoints = $ret['Datapoints'];
+
+                //倒序，最近的就是第一个
+                usort($dataPoints, function ($a, $b) {
+                    if ($a['Timestamp'] == $b['Timestamp']) {
+                        return 0;
+                    }
+                    return ($a['Timestamp'] < $b['Timestamp']) ? 1 : -1;
+                });
+
+                $currentCPU = $dataPoints[0]['Average'] ?? 0;
+
+                $currentCPUTotal += $currentCPU;
+                $lastCPUTotal += $dataPoints[1]['Average'] ?? $currentCPU;
+
+                if ($currentCPU > 0 && $currentCPU < $this->config['auto_scale_cpu_threshold'][0]) {
+                    //缩容
+                    $lowLoadNodes++;
+                }
+            }
+
+            $currentCPUAvg = $currentCPUTotal / $totalNodes;
+            $lastCPUAvg = $lastCPUTotal / $totalNodes;
+
+            //提升幅度
+            $increaseRate = $lastCPUAvg > 0 ? $currentCPUAvg / $lastCPUAvg : 0;
+
+            if ($currentCPUAvg > $this->config['auto_scale_cpu_threshold'][1]) {
+                //扩容
+                $content = <<<STRING
+<p><strong>nodes in {$region} is on high load, current avg. cpu {$currentCPUAvg}%</strong><p>
+<p>Start scale up<p>
+STRING;
+                $this->sendAlarmEmail('High cpu load, start scale up', $content);
+
+                $this->scaleUp($region);
+
+                $content = <<<STRING
+<p><strong>nodes in {$region} is on high load, current avg. cpu {$currentCPUAvg}%</strong><p>
+<p>End scale up<p>
+STRING;
+                $this->sendAlarmEmail('High cpu load, end scale up', $content);
+            }
+
+            if ($lowLoadNodes == $totalNodes) {
+                //全部低负载，缩容
+                $content = <<<STRING
+<p><strong>nodes in {$region} is on low load, current avg. cpu {$currentCPUAvg}%</strong><p>
+<p>Start scale down<p>
+STRING;
+                $this->sendAlarmEmail('Low cpu load, start scale down', $content);
+
+                $this->scaleDown($region);
+
+                $content = <<<STRING
+<p><strong>nodes in {$region} is on low load, current avg. cpu {$currentCPUAvg}%</strong><p>
+<p>End scale down<p>
+STRING;
+                $this->sendAlarmEmail('Low cpu load, end scale down', $content);
+            }
+        }
+
+        $usedTime = time() - $startTime;
+
+        Log::info("end watching auto scale, time used: {$usedTime}s");
     }
 }

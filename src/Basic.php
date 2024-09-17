@@ -73,6 +73,9 @@ class Basic
 
             'r53_subdomain' => '', // route53中的域名前缀，比如 *.domain.com就是*
 
+            'auto_scale_cpu_metric' => [],
+            'auto_scale_cpu_threshold' => [], //缩容和扩容百分比
+
             'loggers' => [], //日志记录
         ];
 
@@ -636,6 +639,55 @@ STRING;
         }
 
         return true;
+    }
+
+    /**
+     * 发送健康状况通知邮件
+     *
+     * @return void
+     */
+    public function sendAlarmEmail($subject, $content)
+    {
+        $sesV2Client = new \Aws\SesV2\SesV2Client([
+            'credentials' => [
+                'key' => $this->config['aws_key'],
+                'secret' => $this->config['aws_secret'],
+            ],
+            'http' => [
+                'connect_timeout' => 5,
+                'timeout' => 15,
+                'verify' => false, //Disable SSL/TLS verification
+            ],
+            'retries' => 3,
+            'version' => '2019-09-27',
+            'region' => 'us-east-1'
+        ]);
+
+        $sesV2Client->sendEmail([
+            'Content' => [
+                'Simple' => [
+                    'Body' => [
+                        'Html' => [
+                            'Charset' => 'UTF-8',
+                            'Data' => $content,
+                        ],
+                    ],
+                    'Subject' => [
+                        'Charset' => 'UTF-8',
+                        'Data' => $subject,
+                    ],
+                ]
+            ],
+            'Destination' => [
+                'BccAddresses' => [],
+                'CcAddresses' => [],
+                //注意这里只能用单个用户，如果用多个用户，每个用户都能看到其他收件人的地址
+                'ToAddresses' => [
+                    "Mr Lee <maxalarm@foxmail.com>",
+                ],
+            ],
+            'FromEmailAddress' => 'Mtech Alarm <alarm@maxbytech.com>',
+        ]);
     }
 
     /**
