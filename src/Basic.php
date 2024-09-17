@@ -312,6 +312,8 @@ STRING;
 
         $startTime = time();
 
+        $maxAttempts = 30;
+
         list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
 
         //启动完成的nodes
@@ -341,6 +343,9 @@ STRING;
                 } catch (\Exception $e) {
                     $chInfo = curl_getinfo($ch);
                     curl_close($ch);
+
+                    sleep(5);
+
                     continue;
                 }
 
@@ -349,6 +354,9 @@ STRING;
                 if ($errNo) {
                     $chInfo = curl_getinfo($ch);
                     curl_close($ch);
+
+                    sleep(5);
+
                     continue;
                 }
 
@@ -366,11 +374,11 @@ STRING;
                 }
 
                 sleep(5);
-            } while ($checkAttempts <= 30);
+            } while ($checkAttempts <= $maxAttempts);
         }
 
         if (count($readyNodes) != count($ipList)) {
-            Log::error("app in instances is not ready, ready nodes: " . implode(',', $readyNodes) . ", all nodes:" . implode(',', $ipList));
+            Log::error("app in instances is not ready after {$maxAttempts} checks, ready nodes: " . implode(',', $readyNodes) . ", all nodes:" . implode(',', $ipList));
             return false;
         }
 
