@@ -389,9 +389,8 @@ class Aga extends Abs
 
                 Log::info("success to create new endpoint group in {$region}");
             } else {
-                $newEndpointConfs = array_merge($epgInfo['EndpointDescriptions'], $newEndpointConfs);
                 $this->client->updateEndpointGroup([
-                    'EndpointConfigurations' => $newEndpointConfs,
+                    'EndpointConfigurations' => array_merge($epgInfo['EndpointDescriptions'], $newEndpointConfs),
                     'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
                 ]);
             }
