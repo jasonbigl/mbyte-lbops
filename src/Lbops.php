@@ -17,7 +17,7 @@ class Lbops extends Basic
      *
      * @return void
      */
-    public function deploy($version, $allocateNewEIP = false)
+    public function deploy($version, $allocateNewEIP = false, $targetRegion = null)
     {
         if ($this->opLocked()) {
             return;
@@ -61,6 +61,11 @@ class Lbops extends Basic
         $newRegionInsList = [];
 
         foreach ($this->config['regions'] as $region) {
+            if ($targetRegion && $region != $targetRegion) {
+                //只发布指定区域，非指定区域跳过
+                continue;
+            }
+
             //需要发布的服务器数
             $deployCount = 1;
 
