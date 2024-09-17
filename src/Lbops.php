@@ -209,16 +209,14 @@ class Lbops extends Basic
             //wait at least 40 minutes if route53
             //获取上次发布时间
             $lastDeployDatetime = $this->route53->getLastDeployDateTime();
-            if (!$lastDeployDatetime) {
-                return;
-            }
+            if ($lastDeployDatetime) {
+                $lastDeployTimestamp = \DateTime::createFromFormat('Y-m-d H:i:s', $lastDeployDatetime, new \DateTimeZone('Asia/Shanghai'))->getTimestamp();
 
-            $lastDeployTimestamp = \DateTime::createFromFormat('Y-m-d H:i:s', $lastDeployDatetime, new \DateTimeZone('Asia/Shanghai'))->getTimestamp();
-
-            if (time() - $lastDeployTimestamp <= 2400) {
-                //less then 40 minutes
-                Log::error("the last route 53 deployment is less then 40 minutes, skip clean");
-                return;
+                if (time() - $lastDeployTimestamp <= 2400) {
+                    //less then 40 minutes
+                    Log::error("the last route 53 deployment is less then 40 minutes, skip clean");
+                    return;
+                }
             }
         }
 
