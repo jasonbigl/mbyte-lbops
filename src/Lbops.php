@@ -770,15 +770,12 @@ class Lbops extends Basic
      * @param [type] $failThreshold 失败指标的连续次数
      * @return void
      */
-    public function monitor($intervalS, $failThreshold)
+    public function monitor($intervalS, $failThreshold, $maxCheckAttempts)
     {
         if ($intervalS < 10) {
             Log::error("interval too smal, should be > 10, current: {$intervalS}");
             return;
         }
-
-        Log::info("start monitor health");
-        $startTime = time();
 
         if ($this->config['r53_zones']) {
             //用route53中的ip作为监控目标
@@ -789,8 +786,6 @@ class Lbops extends Basic
         }
 
         list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
-
-        Log::info("start monitoring nodes: " . json_encode($regionNodes, JSON_UNESCAPED_SLASHES));
 
         foreach ($regionNodes as $region => $nodeList) {
             foreach ($nodeList as $node) {
@@ -821,8 +816,9 @@ class Lbops extends Basic
                     } catch (\Exception $e) {
                         $chInfo = curl_getinfo($ch);
                         curl_close($ch);
-
                         $unHealthyRets++;
+
+                        sleep($intervalS);
                         continue;
                     }
 
@@ -832,6 +828,8 @@ class Lbops extends Basic
                         $chInfo = curl_getinfo($ch);
                         curl_close($ch);
                         $unHealthyRets++;
+
+                        sleep($intervalS);
                         continue;
                     }
 
@@ -848,7 +846,7 @@ class Lbops extends Basic
                     }
 
                     sleep($intervalS);
-                } while ($checkAttempts <= 5 && $unHealthyRets < $failThreshold);
+                } while ($checkAttempts <= $maxCheckAttempts && $unHealthyRets < $failThreshold);
 
                 if ($unHealthyRets >= $failThreshold) {
                     Log::error("Unhealthy node {$node['ins_id']} ({$node['ipv4']}) in {$region}, start scale up");
@@ -873,10 +871,6 @@ STRING;
                 }
             }
         }
-
-        $usedTime = time() - $startTime;
-
-        Log::info("finished monitor health, time used: {$usedTime}s");
     }
 
     /**
