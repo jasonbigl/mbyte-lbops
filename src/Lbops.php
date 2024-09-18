@@ -777,6 +777,8 @@ class Lbops extends Basic
             return;
         }
 
+        $startTime = time();
+
         if ($this->config['r53_zones']) {
             //用route53中的ip作为监控目标
             $regionNodes = $this->route53->getAllNodes(true);
@@ -788,6 +790,8 @@ class Lbops extends Basic
         list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
 
         foreach ($regionNodes as $region => $nodeList) {
+            $unhealthyNodes = [];
+
             foreach ($nodeList as $node) {
                 $nodeIp = $node['ipv4'];
 
@@ -846,31 +850,40 @@ class Lbops extends Basic
                     }
 
                     sleep($intervalS);
-                } while ($checkAttempts <= $maxCheckAttempts && $unHealthyRets < $failThreshold);
+                } while ($checkAttempts < $maxCheckAttempts && $unHealthyRets < $failThreshold);
+
+                //Log::info("node {$node['ins_id']} ({$node['ipv4']}) in {$region}, {$unHealthyRets} / {$failThreshold}, {$checkAttempts} / {$maxCheckAttempts}");
 
                 if ($unHealthyRets >= $failThreshold) {
-                    Log::error("Unhealthy node {$node['ins_id']} ({$node['ipv4']}) in {$region}, start scale up");
+                    //该节点不健康，整个区域都升级
+                    Log::error("Unhealthy node {$node['ins_id']} ({$node['ipv4']}) in {$region}");
 
-                    //该节点不健康
-                    $content = <<<STRING
-<p><strong>{$node['ins_id']} ({$node['ipv4']}) in {$region} is not healthy</strong><p>
-<p>Start scale up<p>
-STRING;
-                    $this->sendAlarmEmail('Unhealthy node, start scale up', $content);
+                    $unhealthyNodes[] = "Unhealthy node {$node['ins_id']} ({$node['ipv4']}) in {$region}";
 
-                    //直接升级
-                    $this->scaleUp($region);
-
-                    $content = <<<STRING
-<p><strong>{$node['ins_id']} ({$node['ipv4']}) in {$region} is not healthy</strong><p>
-<p>End scale up<p>
-STRING;
-                    $this->sendAlarmEmail('Unhealthy node, end scale up', $content);
-
-                    Log::error("Unhealthy node {$node['ins_id']} ({$node['ipv4']}) in {$region}, end scale up");
+                    break;
                 }
             }
+
+            if ($unhealthyNodes) {
+                //节点不健康
+                $nodeContent = array_map(function ($item) {
+                    return "<p>{$item}</>";
+                }, $unhealthyNodes);
+
+                $content = $nodeContent . "<p>Start scale up<p>";
+                $this->sendAlarmEmail('Unhealthy nodes, start scale up', $content);
+
+                //直接升级
+                $this->scaleUp($region);
+
+                $content = $nodeContent . "<p>End scale up<p>";
+                $this->sendAlarmEmail('Unhealthy node, end scale up', $content);
+            }
         }
+
+        $timeUsed = time() - $startTime;
+
+        //Log::info("Finish monitor, time used: {$timeUsed}s");
     }
 
     /**
