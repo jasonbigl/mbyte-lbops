@@ -108,7 +108,7 @@ class Route53 extends Abs
             return '';
         }
 
-        $tags = $ret['Tags'] ?? [];
+        $tags = $ret['ResourceTagSet']['Tags'] ?? [];
         $lastDeployTime = null;
         foreach ($tags as $tag) {
             if ($tag['Key'] == "{$this->config['module']}:Deploy DateTime") {
@@ -134,6 +134,10 @@ class Route53 extends Abs
      */
     public function updateTags($deployedVersion)
     {
+        if (!$this->config['r53_zones']) {
+            return;
+        }
+
         //update route53 hosted zone tag
         Log::info("updating route53 tags");
 
@@ -321,10 +325,10 @@ class Route53 extends Abs
             }
 
             if ($item['Region'] == $region) {
-                
+
                 $ipList = array_column($item['ResourceRecords'], 'Value');
                 if ($allInfo) {
-                    
+
                     //同时返回ins id
                     $ret = $ec2Client->describeInstances([
                         'Filters' => [
@@ -334,7 +338,7 @@ class Route53 extends Abs
                             ]
                         ]
                     ]);
-                    
+
                     if ($ret && $ret['Reservations']) {
                         foreach ($ret['Reservations'] as $resv) {
                             foreach ($resv['Instances'] as $tmpIns) {
