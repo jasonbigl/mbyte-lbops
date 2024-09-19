@@ -1036,8 +1036,10 @@ class Lbops extends Basic
             //提升幅度
             $increaseRate = $lastCPUAvg > 0 ? $currentCPUAvg / $lastCPUAvg : 0;
 
-            if ($currentCPUAvg > $this->config['auto_scale_cpu_threshold'][1]) {
-                //扩容
+            $scaleLargeFlagFile = "/tmp/mbyte-lbops-{$this->config['module']}-scale-large.flag";
+            $lastScalelargeTime = file_exists($scaleLargeFlagFile) ? file_get_contents($scaleLargeFlagFile) : 0;
+            if (time() - $lastScalelargeTime > 300 && $currentCPUAvg > $this->config['auto_scale_cpu_threshold'][1]) {
+                //扩容（要快），需要记录上次扩容至少5分钟，方便新扩容的机器生效
                 Log::info("start scale up, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][1]}%");
 
                 $content = <<<STRING
@@ -1053,18 +1055,20 @@ STRING;
 <p>End scale up<p>
 STRING;
                 $this->sendAlarmEmail('High cpu load, end scale up', $content);
+
+                file_put_contents($lastScalelargeTime, time());
             }
 
             if ($lowLoadNodes == $totalNodes) {
-                //全部低负载，缩容
+                //全部低负载，缩容（要慢）
                 $tmpNode = reset($nodeList);
                 $tmpInsId = $tmpNode['ins_id'];
                 $tmpInsData = $this->describeInstance($region, $tmpInsId);
                 $insType = $tmpInsData['InstanceType'] ?? null;
 
                 $scaleSmallFlagFile = "/tmp/mbyte-lbops-{$this->config['module']}-scale-small.flag";
-                $lastScaledownTime = file_exists($scaleSmallFlagFile) ? file_get_contents($scaleSmallFlagFile) : 0;
-                if (time() - $lastScaledownTime > 1800 && $insType != $this->verticalScaleInstypes[0]) {
+                $lastScalesmallTime = file_exists($scaleSmallFlagFile) ? file_get_contents($scaleSmallFlagFile) : 0;
+                if (time() - $lastScalesmallTime > 1800 && $insType != $this->verticalScaleInstypes[0]) {
                     //不是最小的，缩容
                     Log::info("start scale down, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
 
@@ -1086,9 +1090,9 @@ STRING;
                 }
 
                 //重新获取一次时间，避免刚scale down完就scale in
-                $lastScaledownTime = file_exists($scaleSmallFlagFile) ? file_get_contents($scaleSmallFlagFile) : 0;
+                $lastScalesmallTime = file_exists($scaleSmallFlagFile) ? file_get_contents($scaleSmallFlagFile) : 0;
 
-                if (time() - $lastScaledownTime > 1800 && $totalNodes > 1) {
+                if (time() - $lastScalesmallTime > 1800 && $totalNodes > 1) {
                     //距离上次scale down/in超过半小时，尝试scale in
                     Log::info("start scale in, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
 
