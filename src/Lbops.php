@@ -154,6 +154,9 @@ class Lbops extends Basic
                     }
 
                     $this->route53->replaceNodes($region, $newIpList);
+
+                    //更改了node才更新date time
+                    $this->route53->updateTags($version);
                 } else {
                     //直接用旧的eip重新关联ec2即可，无需更改route53
                     //获取旧eip
@@ -216,15 +219,19 @@ class Lbops extends Basic
 
         //有aga，删除旧节点
         if ($this->config['aga_arns']) {
-            foreach ($newRegionInsList as $region => $insList) {
-                $insIdList = array_column($insList, 'ins_id');
+            foreach ($this->config['aga_arns'] as $agaArn) {
+                //4. 等待aga部署完成
+                $ret = $this->aga->waitAgaDeployed($agaArn);
+                if (!$ret) {
+                    continue;
+                }
 
-                foreach ($this->config['aga_arns'] as $agaArn) {
-                    //4. 等待aga部署完成
-                    $ret = $this->aga->waitAgaDeployed($agaArn);
-                    if (!$ret) {
-                        continue;
-                    }
+                //找到第一个listener
+                $agaListeners = $this->aga->listListenerArns($agaArn);
+                $agaListenerArn = reset($agaListeners);
+
+                foreach ($newRegionInsList as $region => $insList) {
+                    $insIdList = array_column($insList, 'ins_id');
 
                     //5.删除旧节点 (仅保留新节点)
                     Log::info("remove old endpoints in {$region}");
@@ -239,14 +246,13 @@ class Lbops extends Basic
                         'EndpointConfigurations' => $newEndpointsConf,
                         'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
                     ]);
-                    Log::info("old endpoints removed in {$region}");
+                    Log::info("old endpoints removed in {$region}, remaining: " . implode(',', $insIdList));
                 }
             }
         }
 
         //update tag
         $this->aga->updateTags($version);
-        $this->route53->updateTags($version);
 
         $timeUsed = time() - $startTime;
         Log::info("deploy finished, version: {$version}, time used: {$timeUsed}s");
