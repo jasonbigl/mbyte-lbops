@@ -5,7 +5,7 @@ namespace Mbyte\Lbops;
 class Lbops extends Basic
 {
     //竖向扩容机器路线
-    public $scaleUpInsTypes = [
+    public $verticalScaleInstypes = [
         't4g.small',
         'c6g.xlarge',
         'c6g.2xlarge',
@@ -534,8 +534,6 @@ class Lbops extends Basic
                 ];
             }, $insIdList);
 
-            Log::info("updating aga in {$region}: " . implode(',', $insIdList));
-
             //循环部署所有的aga
             foreach ($this->config['aga_arns'] as $agaArn) {
                 //找到第一个listener
@@ -548,6 +546,8 @@ class Lbops extends Basic
                     'EndpointConfigurations' => $newEndpointConfs,
                     'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
                 ]);
+
+                Log::info("aga updated successfully in {$region} : " . implode(',', $insIdList));
             }
         }
 
@@ -612,17 +612,17 @@ class Lbops extends Basic
             return;
         }
 
-        $currentKey = array_search($insType, $this->scaleUpInsTypes);
+        $currentKey = array_search($insType, $this->verticalScaleInstypes);
         if ($currentKey === false) {
-            Log::error("unable to find current instance type {$insType} location in types: " . implode(',', $this->scaleUpInsTypes));
+            Log::error("unable to find current instance type {$insType} location in types: " . implode(',', $this->verticalScaleInstypes));
             return;
         }
 
         $targetKey = $currentKey + 1;
-        $targetInsType = $this->scaleUpInsTypes[$targetKey] ?? null;
+        $targetInsType = $this->verticalScaleInstypes[$targetKey] ?? null;
         if (!$targetInsType) {
             //到顶了
-            Log::error("unable to get target instance type based on current type {$insType}, types: " . implode(',', $this->scaleUpInsTypes));
+            Log::error("unable to get target instance type based on current type {$insType}, types: " . implode(',', $this->verticalScaleInstypes));
             return;
         }
 
@@ -745,17 +745,17 @@ class Lbops extends Basic
             return;
         }
 
-        $currentKey = array_search($insType, $this->scaleUpInsTypes);
+        $currentKey = array_search($insType, $this->verticalScaleInstypes);
         if ($currentKey === false) {
-            Log::error("unable to find current instance type {$insType} location in types: " . implode(',', $this->scaleUpInsTypes));
+            Log::error("unable to find current instance type {$insType} location in types: " . implode(',', $this->verticalScaleInstypes));
             return;
         }
 
         $targetKey = $currentKey - 1;
-        $targetInsType = $this->scaleUpInsTypes[$targetKey] ?? null;
+        $targetInsType = $this->verticalScaleInstypes[$targetKey] ?? null;
         if (!$targetInsType) {
             //到顶了
-            Log::error("unable to get target instance type based on current type {$insType}, types: " . implode(',', $this->scaleUpInsTypes));
+            Log::error("unable to get target instance type based on current type {$insType}, types: " . implode(',', $this->verticalScaleInstypes));
             return;
         }
 
@@ -1013,6 +1013,9 @@ class Lbops extends Basic
                     return ($a['Timestamp'] < $b['Timestamp']) ? 1 : -1;
                 });
 
+                //debug log
+                //Log::info("nodes metrics in {$region}: " . json_encode($dataPoints, JSON_UNESCAPED_SLASHES));
+
                 $currentCPU = $dataPoints[0]['Average'] ?? 0;
 
                 $currentCPUTotal += $currentCPU;
@@ -1027,11 +1030,16 @@ class Lbops extends Basic
             $currentCPUAvg = $currentCPUTotal / $totalNodes;
             $lastCPUAvg = $lastCPUTotal / $totalNodes;
 
+            //debug log
+            //Log::info("nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%");
+
             //提升幅度
             $increaseRate = $lastCPUAvg > 0 ? $currentCPUAvg / $lastCPUAvg : 0;
 
             if ($currentCPUAvg > $this->config['auto_scale_cpu_threshold'][1]) {
                 //扩容
+                Log::info("start scale up, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][1]}%");
+
                 $content = <<<STRING
 <p><strong>nodes in {$region} is on high load, current avg. cpu {$currentCPUAvg}%</strong><p>
 <p>Start scale up<p>
@@ -1049,19 +1057,57 @@ STRING;
 
             if ($lowLoadNodes == $totalNodes) {
                 //全部低负载，缩容
-                $content = <<<STRING
+                $tmpNode = reset($nodeList);
+                $tmpInsId = $tmpNode['ins_id'];
+                $tmpInsData = $this->describeInstance($region, $tmpInsId);
+                $insType = $tmpInsData['InstanceType'] ?? null;
+
+                $scaleSmallFlagFile = "/tmp/mbyte-lbops-{$this->config['module']}-scale-small.flag";
+                $lastScaledownTime = file_exists($scaleSmallFlagFile) ? file_get_contents($scaleSmallFlagFile) : 0;
+                if (time() - $lastScaledownTime > 1800 && $insType != $this->verticalScaleInstypes[0]) {
+                    //不是最小的，缩容
+                    Log::info("start scale down, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
+
+                    $content = <<<STRING
 <p><strong>nodes in {$region} is on low load, current avg. cpu {$currentCPUAvg}%</strong><p>
 <p>Start scale down<p>
 STRING;
-                $this->sendAlarmEmail('Low cpu load, start scale down', $content);
+                    $this->sendAlarmEmail('Low cpu load, start scale down', $content);
 
-                $this->scaleDown($region);
+                    $this->scaleDown($region);
 
-                $content = <<<STRING
+                    $content = <<<STRING
 <p><strong>nodes in {$region} is on low load, current avg. cpu {$currentCPUAvg}%</strong><p>
 <p>End scale down<p>
 STRING;
-                $this->sendAlarmEmail('Low cpu load, end scale down', $content);
+                    $this->sendAlarmEmail('Low cpu load, end scale down', $content);
+
+                    file_put_contents($scaleSmallFlagFile, time());
+                }
+
+                //重新获取一次时间，避免刚scale down完就scale in
+                $lastScaledownTime = file_exists($scaleSmallFlagFile) ? file_get_contents($scaleSmallFlagFile) : 0;
+
+                if (time() - $lastScaledownTime > 1800 && $totalNodes > 1) {
+                    //距离上次scale down/in超过半小时，尝试scale in
+                    Log::info("start scale in, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
+
+                    $content = <<<STRING
+<p><strong>nodes in {$region} is on low load, current avg. cpu {$currentCPUAvg}%</strong><p>
+<p>Start scale in<p>
+STRING;
+                    $this->sendAlarmEmail('Low cpu load, start scale in', $content);
+
+                    $this->scaleIn($region);
+
+                    $content = <<<STRING
+<p><strong>nodes in {$region} is on low load, current avg. cpu {$currentCPUAvg}%</strong><p>
+<p>End scale in<p>
+STRING;
+                    $this->sendAlarmEmail('Low cpu load, end scale in', $content);
+
+                    file_put_contents($scaleSmallFlagFile, time());
+                }
             }
         }
 

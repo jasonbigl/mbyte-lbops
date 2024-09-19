@@ -705,7 +705,8 @@ STRING;
      */
     public function opLocked()
     {
-        if (file_exists('/tmp/mbyte-lbops.lock') && file_get_contents('/tmp/mbyte-lbops.lock') == 'y') {
+        $opLockFile = "/tmp/mbyte-lbops-{$this->config['module']}-op.lock";
+        if (file_exists($opLockFile) && file_get_contents($opLockFile) == 'y') {
             Log::info("lbops has been locked by another operation, skip");
             return true;
         }
@@ -720,7 +721,8 @@ STRING;
      */
     public function lockOp()
     {
-        file_put_contents('/tmp/mbyte-lbops.lock', 'y');
+        $opLockFile = "/tmp/mbyte-lbops-{$this->config['module']}-op.lock";
+        file_put_contents($opLockFile, 'y');
     }
 
     /**
@@ -730,6 +732,7 @@ STRING;
      */
     public function unlockOp()
     {
-        file_put_contents('/tmp/mbyte-lbops.lock', 'n');
+        $opLockFile = "/tmp/mbyte-lbops-{$this->config['module']}-op.lock";
+        file_put_contents($opLockFile, 'n');
     }
 }
