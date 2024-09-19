@@ -961,7 +961,9 @@ class Lbops extends Basic
             return;
         }
 
-        Log::info("start watching auto scale");
+        //debug log
+        //Log::info("start watching auto scale");
+
         $startTime = time();
 
         if ($this->config['r53_zones']) {
@@ -1123,6 +1125,7 @@ STRING;
 
         $usedTime = time() - $startTime;
 
-        Log::info("end watching auto scale, time used: {$usedTime}s");
+        //debug log
+        //Log::info("end watching auto scale, time used: {$usedTime}s");
     }
 }
