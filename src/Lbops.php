@@ -110,7 +110,7 @@ class Lbops extends Basic
 
         //将新机器部署
         foreach ($newRegionInsList as $region => $insList) {
-            $insIds = array_column($insList, 'ins_id');
+            $insIdList = array_column($insList, 'ins_id');
             $ipv4List = array_column($insList, 'ipv4');
 
             //等待app ready
@@ -183,7 +183,64 @@ class Lbops extends Basic
 
             //将新启动的ec2部署到aga中
             if ($this->config['aga_arns']) {
-                $this->aga->replaceNodes($region, $insIds);
+                //先全部添加
+                foreach ($this->config['aga_arns'] as $agaArn) {
+                    //找到第一个listener
+                    $agaListeners = $this->aga->listListenerArns($agaArn);
+                    $agaListenerArn = reset($agaListeners);
+
+                    //1. 添加
+                    $this->aga->addEndpoints($agaListenerArn, $region, $insIdList);
+                }
+            }
+        }
+
+        //有aga，之前只是全部添加，还未启用，开始检查healthy并启用
+        if ($this->config['aga_arns']) {
+            foreach ($newRegionInsList as $region => $insList) {
+                $insIdList = array_column($insList, 'ins_id');
+
+                foreach ($this->config['aga_arns'] as $agaArn) {
+                    //找到第一个listener
+                    $agaListeners = $this->aga->listListenerArns($agaArn);
+                    $agaListenerArn = reset($agaListeners);
+
+                    //2. 等待endpoint全部ready
+                    $this->aga->waitEndpointsHealthy($agaListenerArn, $region, $insIdList);
+
+                    //3.将endpoint启用，weight改成128
+                    $this->aga->enableEndpoints($agaListenerArn, $region, $insIdList);
+                }
+            }
+        }
+
+        //有aga，删除旧节点
+        if ($this->config['aga_arns']) {
+            foreach ($newRegionInsList as $region => $insList) {
+                $insIdList = array_column($insList, 'ins_id');
+
+                foreach ($this->config['aga_arns'] as $agaArn) {
+                    //4. 等待aga部署完成
+                    $ret = $this->aga->waitAgaDeployed($agaArn);
+                    if (!$ret) {
+                        continue;
+                    }
+
+                    //5.删除旧节点 (仅保留新节点)
+                    Log::info("remove old endpoints in {$region}");
+                    $epgInfo = $this->aga->findEndpointGroupByRegion($agaListenerArn, $region);
+                    $newEndpointsConf = [];
+                    foreach ($epgInfo['EndpointDescriptions'] as $ep) {
+                        if (in_array($ep['EndpointId'], $insIdList)) {
+                            $newEndpointsConf[] = $ep;
+                        }
+                    }
+                    $this->aga->client->updateEndpointGroup([
+                        'EndpointConfigurations' => $newEndpointsConf,
+                        'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
+                    ]);
+                    Log::info("old endpoints removed in {$region}");
+                }
             }
         }
 

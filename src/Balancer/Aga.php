@@ -347,16 +347,6 @@ class Aga extends Abs
             return;
         }
 
-        //新的endpoints
-        //https://docs.aws.amazon.com/aws-sdk-php/v3/api/api-globalaccelerator-2018-08-08.html#shape-endpointconfiguration
-        $newEndpointConfs = array_map(function ($tmpInsId) {
-            return [
-                'ClientIPPreservationEnabled' => true,
-                'EndpointId' => $tmpInsId,
-                'Weight' => 0, //新节点都设权重为0，状态为healthy之后再改成128
-            ];
-        }, $insIdList);
-
         Log::info("start replace instance in aga: " . implode(',', $insIdList));
 
         //循环部署所有的aga
@@ -368,87 +358,13 @@ class Aga extends Abs
             $agaListenerArn = reset($agaListeners);
 
             //1. 添加
-            $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
-            if (!$epgInfo) {
-                Log::info("no endpoint group in {$region}, create new one");
-
-                list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
-
-                //该地区没有endpoint group，则创建一个
-                $this->client->createEndpointGroup([
-                    'EndpointConfigurations' => $newEndpointConfs,
-                    'EndpointGroupRegion' => $region, // REQUIRED
-                    'HealthCheckIntervalSeconds' => 10,
-                    'ThresholdCount' => 2,
-                    'HealthCheckPath' => '/' . $healthCheckPath,
-                    'HealthCheckPort' => 80,
-                    'HealthCheckProtocol' => 'HTTP',
-                    'IdempotencyToken' => $region . $agaListenerArn, // REQUIRED
-                    'ListenerArn' => $agaListenerArn, // REQUIRED
-                ]);
-
-                Log::info("success to create new endpoint group in {$region}");
-            } else {
-                $this->client->updateEndpointGroup([
-                    'EndpointConfigurations' => array_merge($epgInfo['EndpointDescriptions'], $newEndpointConfs),
-                    'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
-                ]);
-            }
+            $this->addEndpoints($agaListenerArn, $region, $insIdList);
 
             //2. 等待endpoint全部ready
-            Log::info("wait endpoint in aga to be healthy...");
-            $counter = 1;
-            $isHealthy = false;
+            $this->waitEndpointsHealthy($agaListenerArn, $region, $insIdList);
 
-            while (!$isHealthy && $counter <= 20) {
-
-                $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
-
-                if (!$epgInfo) {
-                    Log::error("no endpoint group in {$region}");
-                    break;
-                }
-
-                $healthyEndpoints = 0;
-                foreach ($epgInfo['EndpointDescriptions'] as $ep) {
-                    if (in_array($ep['EndpointId'], $insIdList) && $ep['HealthState'] == 'HEALTHY') {
-                        $healthyEndpoints++;
-                    }
-                }
-
-                //新节点全部healthy
-                $isHealthy = $healthyEndpoints == count($insIdList);
-
-                $counter++;
-                sleep(5);
-            }
-
-            if (!$isHealthy) {
-                Log::error("endpoints in aga is not healthy after {$counter} checks:" . implode(',', $insIdList));
-                return false;
-            }
-
-            Log::info("endpoints in {$region} is healthy after {$counter} checks: " . implode(',', $insIdList));
-
-            //3.将endpoint启用（weight改成128）
-            Log::info("enable endpoints in {$region}");
-
-            $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
-            $newEndpointsConf = [];
-            foreach ($epgInfo['EndpointDescriptions'] as $ep) {
-                $tmpEp = $ep;
-                if (in_array($ep['EndpointId'], $insIdList)) {
-                    $tmpEp['Weight'] = 128;
-                }
-
-                $newEndpointsConf[] = $tmpEp;
-            }
-            $this->client->updateEndpointGroup([
-                'EndpointConfigurations' => $newEndpointsConf,
-                'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
-            ]);
-
-            Log::info("endpoints enabled in {$region}");
+            //3.将endpoint启用，weight改成128
+            $this->enableEndpoints($agaListenerArn, $region, $insIdList);
 
             //4. 等待aga部署完成
             $ret = $this->waitAgaDeployed($agaArn);
@@ -501,92 +417,14 @@ class Aga extends Abs
             $agaListeners = $this->listListenerArns($agaArn);
             $agaListenerArn = reset($agaListeners);
 
-            $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
-            if (!$epgInfo) {
-
-                Log::info("no endpoint group in {$region}, create new one");
-
-                list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
-
-                //该地区没有endpoint group，则创建一个
-                $this->client->createEndpointGroup([
-                    'EndpointConfigurations' => $newEndpointConfs,
-                    'EndpointGroupRegion' => $region, // REQUIRED
-                    'HealthCheckIntervalSeconds' => 10,
-                    'ThresholdCount' => 2,
-                    'HealthCheckPath' => '/' . $healthCheckPath,
-                    'HealthCheckPort' => 80,
-                    'HealthCheckProtocol' => 'HTTP',
-                    'IdempotencyToken' => $region . $agaListenerArn, // REQUIRED
-                    'ListenerArn' => $agaListenerArn, // REQUIRED
-                ]);
-
-                Log::info("success to create new endpoint group in {$region}");
-
-                continue;
-            }
-
             //1. 添加
-            $newEndpointConfs = array_merge($epgInfo['EndpointDescriptions'], $newEndpointConfs);
-            $this->client->updateEndpointGroup([
-                'EndpointConfigurations' => $newEndpointConfs,
-                'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
-            ]);
+            $this->addEndpoints($agaListenerArn, $region, $insIdList);
 
             //2. 等待endpoint全部ready
-            Log::info("wait endpoint in aga to be healthy...");
-            $counter = 1;
-            $isHealthy = false;
+            $this->waitEndpointsHealthy($agaListenerArn, $region, $insIdList);
 
-            while (!$isHealthy && $counter <= 20) {
-
-                $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
-
-                if (!$epgInfo) {
-                    Log::error("no endpoint group in {$region}");
-                    break;
-                }
-
-                $healthyEndpoints = 0;
-                foreach ($epgInfo['EndpointDescriptions'] as $ep) {
-                    if (in_array($ep['EndpointId'], $insIdList) && $ep['HealthState'] == 'HEALTHY') {
-                        $healthyEndpoints++;
-                    }
-                }
-
-                //新节点全部healthy
-                $isHealthy = $healthyEndpoints == count($insIdList);
-
-                $counter++;
-                sleep(5);
-            }
-
-            if (!$isHealthy) {
-                Log::error("endpoints in aga is not healthy after {$counter} checks:" . implode(',', $insIdList));
-                return false;
-            }
-
-            Log::info("endpoints in {$region} is healthy after {$counter} checks: " . implode(',', $insIdList));
-
-            //3.将endpoint启用（weight改成128）
-            Log::info("enable endpoints in {$region}");
-
-            $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
-            $newEndpointsConf = [];
-            foreach ($epgInfo['EndpointDescriptions'] as $ep) {
-                $tmpEp = $ep;
-                if (in_array($ep['EndpointId'], $insIdList)) {
-                    $tmpEp['Weight'] = 128;
-                }
-
-                $newEndpointsConf[] = $tmpEp;
-            }
-            $this->client->updateEndpointGroup([
-                'EndpointConfigurations' => $newEndpointsConf,
-                'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
-            ]);
-
-            Log::info("endpoints enabled in {$region}");
+            //3.将endpoint启用，weight改成128
+            $this->enableEndpoints($agaListenerArn, $region, $insIdList);
 
             //4. 等待aga部署完成
             $ret = $this->waitAgaDeployed($agaArn);
@@ -596,6 +434,131 @@ class Aga extends Abs
         }
 
         Log::info("endpoints added to aga in {$region}: " . implode(',', $insIdList));
+
+        return true;
+    }
+
+    /**
+     * 添加endpoints
+     */
+    public function addEndpoints($agaListenerArn, $region, $insIdList)
+    {
+
+        //新的endpoints
+        //https://docs.aws.amazon.com/aws-sdk-php/v3/api/api-globalaccelerator-2018-08-08.html#shape-endpointconfiguration
+        $newEndpointConfs = array_map(function ($tmpInsId) {
+            return [
+                'ClientIPPreservationEnabled' => true,
+                'EndpointId' => $tmpInsId,
+                'Weight' => 0, //新节点都设权重为0，状态为healthy之后再改成128
+            ];
+        }, $insIdList);
+
+        Log::info("adding endpoints to aga in {$region}: " . implode(',', $insIdList));
+
+        $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
+        if (!$epgInfo) {
+
+            Log::info("no endpoint group in {$region}, create new one");
+
+            list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
+
+            //该地区没有endpoint group，则创建一个
+            $this->client->createEndpointGroup([
+                'EndpointConfigurations' => $newEndpointConfs,
+                'EndpointGroupRegion' => $region, // REQUIRED
+                'HealthCheckIntervalSeconds' => 10,
+                'ThresholdCount' => 2,
+                'HealthCheckPath' => '/' . $healthCheckPath,
+                'HealthCheckPort' => 80,
+                'HealthCheckProtocol' => 'HTTP',
+                'IdempotencyToken' => $region . $agaListenerArn, // REQUIRED
+                'ListenerArn' => $agaListenerArn, // REQUIRED
+            ]);
+
+            Log::info("success to create new endpoint group in {$region}");
+
+            return true;
+        }
+
+        //1. 添加
+        $this->client->updateEndpointGroup([
+            'EndpointConfigurations' => array_merge($epgInfo['EndpointDescriptions'], $newEndpointConfs),
+            'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
+        ]);
+
+        return true;
+    }
+
+    /**
+     * 等待endpoints healthy
+     */
+    public function waitEndpointsHealthy($agaListenerArn, $region, $insIdList)
+    {
+
+        //2. 等待endpoint全部ready
+        Log::info("wait endpoint in aga to be healthy...");
+        $counter = 1;
+        $isHealthy = false;
+
+        while (!$isHealthy && $counter <= 20) {
+
+            $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
+
+            if (!$epgInfo) {
+                Log::error("no endpoint group in {$region}");
+                break;
+            }
+
+            $healthyEndpoints = 0;
+            foreach ($epgInfo['EndpointDescriptions'] as $ep) {
+                if (in_array($ep['EndpointId'], $insIdList) && $ep['HealthState'] == 'HEALTHY') {
+                    $healthyEndpoints++;
+                }
+            }
+
+            //新节点全部healthy
+            $isHealthy = $healthyEndpoints == count($insIdList);
+
+            $counter++;
+            sleep(5);
+        }
+
+        if (!$isHealthy) {
+            Log::error("endpoints in aga is not healthy after {$counter} checks:" . implode(',', $insIdList));
+            return false;
+        }
+
+        Log::info("endpoints in {$region} is healthy after {$counter} checks: " . implode(',', $insIdList));
+
+        return true;
+    }
+
+    /**
+     * 启用endpoints
+     */
+    public function enableEndpoints($agaListenerArn, $region, $insIdList)
+    {
+
+        //3.将endpoint启用（weight改成128）
+        Log::info("enable endpoints in {$region}");
+
+        $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
+        $newEndpointsConf = [];
+        foreach ($epgInfo['EndpointDescriptions'] as $ep) {
+            $tmpEp = $ep;
+            if (in_array($ep['EndpointId'], $insIdList)) {
+                $tmpEp['Weight'] = 128;
+            }
+
+            $newEndpointsConf[] = $tmpEp;
+        }
+        $this->client->updateEndpointGroup([
+            'EndpointConfigurations' => $newEndpointsConf,
+            'EndpointGroupArn' => $epgInfo['EndpointGroupArn'], // REQUIRED
+        ]);
+
+        Log::info("endpoints enabled in {$region}");
 
         return true;
     }
