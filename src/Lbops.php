@@ -119,11 +119,6 @@ class Lbops extends Basic
                 continue;
             }
 
-            //将新启动的ec2部署到aga中
-            if ($this->config['aga_arns']) {
-                $this->aga->replaceNodes($region, $insIds);
-            }
-
             //将新启动的ec2部署到route53中
             if ($this->config['r53_zones']) {
 
@@ -184,6 +179,11 @@ class Lbops extends Basic
                         }
                     }
                 }
+            }
+
+            //将新启动的ec2部署到aga中
+            if ($this->config['aga_arns']) {
+                $this->aga->replaceNodes($region, $insIds);
             }
         }
 
@@ -844,6 +844,9 @@ class Lbops extends Basic
                         $unHealthyRets++;
                     }
 
+                    //debug log
+                    //Log::info("node {$node['ins_id']} ({$node['ipv4']}) in {$region}, {$unHealthyRets} / {$failThreshold}, {$checkAttempts} / {$maxCheckAttempts}");
+
                     if ($unHealthyRets >= $failThreshold) {
                         //认为不健康，跳出循环
                         break;
@@ -851,8 +854,6 @@ class Lbops extends Basic
 
                     sleep($intervalS);
                 } while ($checkAttempts < $maxCheckAttempts && $unHealthyRets < $failThreshold);
-
-                //Log::info("node {$node['ins_id']} ({$node['ipv4']}) in {$region}, {$unHealthyRets} / {$failThreshold}, {$checkAttempts} / {$maxCheckAttempts}");
 
                 if ($unHealthyRets >= $failThreshold) {
                     //该节点不健康，整个区域都升级
@@ -867,17 +868,17 @@ class Lbops extends Basic
             if ($unhealthyNodes) {
                 //节点不健康
                 $nodeContent = array_map(function ($item) {
-                    return "<p>{$item}</>";
+                    return "<p>{$item}</p>";
                 }, $unhealthyNodes);
 
-                $content = $nodeContent . "<p>Start scale up<p>";
+                $content = implode('', $nodeContent) . "<p>Start scale up<p>";
                 $this->sendAlarmEmail('Unhealthy nodes, start scale up', $content);
 
                 //直接升级
                 $this->scaleUp($region);
 
-                $content = $nodeContent . "<p>End scale up<p>";
-                $this->sendAlarmEmail('Unhealthy node, end scale up', $content);
+                $content = implode('', $nodeContent) . "<p>End scale up<p>";
+                $this->sendAlarmEmail('Unhealthy nodes, end scale up', $content);
             }
         }
 
