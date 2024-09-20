@@ -266,7 +266,7 @@ class Lbops extends Basic
      * @param boolean $ignoreRoute53DeployTime 是否忽略route53的发布时间
      * @return void
      */
-    public function clean($ignoreRoute53DeployTime = false)
+    public function clean($ignoreRoute53DeployTime = false, $exceptIpList = [], $exceptInsidList = [])
     {
         if ($this->config['r53_zones'] && !$ignoreRoute53DeployTime) {
             //wait at least 40 minutes if route53
@@ -327,6 +327,10 @@ class Lbops extends Basic
                 }
             }
 
+            if ($exceptIpList) {
+                Log::info("except ip list:" . implode(',', $exceptIpList));
+            }
+
             //清理eip
             //先找到所有的eip
             $ret = $ec2Client->describeAddresses([
@@ -342,7 +346,11 @@ class Lbops extends Basic
                 $cleanEIPs = [];
 
                 foreach ($ret['Addresses'] as $eipAddr) {
-                    if (!in_array($eipAddr['PublicIp'], $agaResvIps) && !in_array($eipAddr['PublicIp'], $r53ResvIps)) {
+                    if (
+                        !in_array($eipAddr['PublicIp'], $agaResvIps)
+                        && !in_array($eipAddr['PublicIp'], $r53ResvIps)
+                        && !in_array($eipAddr['PublicIp'], $exceptIpList)
+                    ) {
                         $cleanEIPs[] = $eipAddr['PublicIp'];
                     }
                 }
@@ -352,6 +360,9 @@ class Lbops extends Basic
                 }
             }
 
+            if ($exceptInsidList) {
+                Log::info("except instance id list:" . implode(',', $exceptInsidList));
+            }
 
             //清理instance
             $ret = $ec2Client->describeInstances([
@@ -372,7 +383,11 @@ class Lbops extends Basic
 
                 foreach ($ret['Reservations'] as $rv) {
                     foreach ($rv['Instances'] as $ins) {
-                        if (!in_array($ins['InstanceId'], $agaResvInsIds) && !in_array($ins['InstanceId'], $r53ResvInsIds))
+                        if (
+                            !in_array($ins['InstanceId'], $agaResvInsIds)
+                            && !in_array($ins['InstanceId'], $r53ResvInsIds)
+                            && !in_array($ins['InstanceId'], $exceptInsidList)
+                        )
                             $cleanInsIds[] = $ins['InstanceId'];
                     }
                 }
