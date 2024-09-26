@@ -1079,7 +1079,7 @@ STRING;
 STRING;
                 $this->sendAlarmEmail('High cpu load, end scale up', $content);
 
-                file_put_contents($lastScalelargeTime, time());
+                file_put_contents($scaleLargeFlagFile, time());
             }
 
             if ($lowLoadNodes == $totalNodes) {
