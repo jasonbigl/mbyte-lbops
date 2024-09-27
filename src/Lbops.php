@@ -29,7 +29,18 @@ class Lbops extends Basic
 
         //当前版本和机器类型
         $insType = $currentVersion = null;
-        if ($this->config['r53_zones']) {
+        if ($this->config['aga_arns']) {
+            $currentVersion = $this->aga->getCurrentVersion();
+
+            $region = reset($this->config['regions']);
+            $regionNodes = $this->aga->getNodesByRegion($region);
+            $node = reset($regionNodes);
+            $insId = $node['ins_id'];
+            $insData = $this->describeInstance($region, $insId);
+            if ($insData) {
+                $insType = $insData['InstanceType'];
+            }
+        } else {
             $currentVersion = $this->route53->getCurrentVersion();
 
             //也返回ins_id，方便关联旧eip
@@ -39,17 +50,6 @@ class Lbops extends Basic
             $node = reset($regionNodes);
             $insIp = $node['ipv4'];
             $insData = $this->findInstanceByIP($region, $insIp);
-            if ($insData) {
-                $insType = $insData['InstanceType'];
-            }
-        } else {
-            $currentVersion = $this->aga->getCurrentVersion();
-
-            $region = reset($this->config['regions']);
-            $regionNodes = $this->aga->getNodesByRegion($region);
-            $node = reset($regionNodes);
-            $insId = $node['ins_id'];
-            $insData = $this->describeInstance($region, $insId);
             if ($insData) {
                 $insType = $insData['InstanceType'];
             }
@@ -416,11 +416,11 @@ class Lbops extends Basic
         }
 
         //从route 53查询现有版本
-        if ($this->config['r53_zones']) {
+        if ($this->config['aga_arns']) {
             //优先用route53
-            $currentVersion = $this->route53->getCurrentVersion();
-        } else {
             $currentVersion = $this->aga->getCurrentVersion();
+        } else {
+            $currentVersion = $this->route53->getCurrentVersion();
         }
 
         if ($this->opLocked()) {
@@ -590,8 +590,22 @@ class Lbops extends Basic
 
         //从route 53查询现有版本，当前机器类型
         $insType = null;
-        if ($this->config['r53_zones']) {
-            //优先用route53
+        if ($this->config['aga_arns']) {
+            //优先用aga，因为route53不一定更新了tag
+            $currentVersion = $this->aga->getCurrentVersion();
+
+            $agaRegionalNodes = $this->aga->getNodesByRegion($region);
+            $node = reset($agaRegionalNodes);
+            $insId = $node['ins_id'];
+            $insData = $this->describeInstance($region, $insId);
+            if ($insData) {
+                $insType = $insData['InstanceType'];
+
+                Log::info("get current instance from aga: {$insType}");
+            }
+
+            $amount = count($agaRegionalNodes);
+        } else {
             $currentVersion = $this->route53->getCurrentVersion();
 
             //也返回ins_id，方便关联旧eip
@@ -607,20 +621,6 @@ class Lbops extends Basic
             }
 
             $amount = count($r53RegionalNodes);
-        } else {
-            $currentVersion = $this->aga->getCurrentVersion();
-
-            $agaRegionalNodes = $this->aga->getNodesByRegion($region);
-            $node = reset($agaRegionalNodes);
-            $insId = $node['ins_id'];
-            $insData = $this->describeInstance($region, $insId);
-            if ($insData) {
-                $insType = $insData['InstanceType'];
-
-                Log::info("get current instance from aga: {$insType}");
-            }
-
-            $amount = count($agaRegionalNodes);
         }
 
         if ($amount <= 0) {
@@ -723,8 +723,22 @@ class Lbops extends Basic
 
         //从route 53查询现有版本，当前机器类型
         $insType = null;
-        if ($this->config['r53_zones']) {
-            //优先用route53
+        if ($this->config['aga_arns']) {
+            //优先用aga
+            $currentVersion = $this->aga->getCurrentVersion();
+
+            $agaRegionalNodes = $this->aga->getNodesByRegion($region);
+            $node = reset($agaRegionalNodes);
+            $insId = $node['ins_id'];
+            $insData = $this->describeInstance($region, $insId);
+            if ($insData) {
+                $insType = $insData['InstanceType'];
+
+                Log::info("get current instance from aga: {$insType}");
+            }
+
+            $amount = count($agaRegionalNodes);
+        } else {
             $currentVersion = $this->route53->getCurrentVersion();
 
             //也返回ins_id，方便关联旧eip
@@ -740,20 +754,6 @@ class Lbops extends Basic
             }
 
             $amount = count($r53RegionalNodes);
-        } else {
-            $currentVersion = $this->aga->getCurrentVersion();
-
-            $agaRegionalNodes = $this->aga->getNodesByRegion($region);
-            $node = reset($agaRegionalNodes);
-            $insId = $node['ins_id'];
-            $insData = $this->describeInstance($region, $insId);
-            if ($insData) {
-                $insType = $insData['InstanceType'];
-
-                Log::info("get current instance from aga: {$insType}");
-            }
-
-            $amount = count($agaRegionalNodes);
         }
 
         if ($amount <= 0) {
