@@ -194,6 +194,10 @@ class Route53 extends Abs
      */
     public function getAllNodes($allInfo = false)
     {
+        if(!$this->config['r53_zones']){
+            return [];
+        }
+        
         $route53Zone = reset($this->config['r53_zones']);
 
         $route53ZoneId = $route53Zone['zone_id'];
@@ -286,6 +290,10 @@ class Route53 extends Abs
      */
     public function getNodesByRegion($region, $allInfo = false)
     {
+        if(!$this->config['r53_zones']){
+            return [];
+        }
+
         $route53Zone = reset($this->config['r53_zones']);
 
         $route53ZoneId = $route53Zone['zone_id'];

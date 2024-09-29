@@ -36,6 +36,13 @@ class Basic
     public $route53;
 
     /**
+     * lock file location
+     *
+     * @var string
+     */
+    public $opLockFile;
+
+    /**
      * Undocumented function
      *
      * @param [type] $config
@@ -103,6 +110,8 @@ class Basic
             'retries' => 3,
             'version' => 'latest',
         ];
+
+        $this->opLockFile = "/tmp/mbyte-lbops-{$this->config['module']}-op.lock";
     }
 
     /**
@@ -368,7 +377,7 @@ STRING;
                     //启动完成
                     $readyNodes[] = $ip;
 
-                    Log::info("app in {$ip} is ready after {$checkAttempts} checks");
+                    Log::info("app in instances {$ip} is ready after {$checkAttempts} checks");
 
                     break;
                 }
@@ -384,7 +393,7 @@ STRING;
 
         $timeUsed = time() - $startTime;
 
-        Log::info("app in instances is ready, time used: {$timeUsed}s");
+        Log::info("app in instances {$ip} is ready, time used: {$timeUsed}s");
 
         return true;
     }
@@ -705,9 +714,8 @@ STRING;
      */
     public function opLocked()
     {
-        $opLockFile = "/tmp/mbyte-lbops-{$this->config['module']}-op.lock";
-        if (file_exists($opLockFile) && file_get_contents($opLockFile) == 'y') {
-            Log::info("lbops has been locked by another operation, skip");
+        if (file_exists($this->opLockFile) && file_get_contents($this->opLockFile) != 'n') {
+            Log::info("lbops has been locked by another operation: " . file_get_contents($this->opLockFile) . ", skip");
             return true;
         }
 
@@ -719,10 +727,9 @@ STRING;
      *
      * @return void
      */
-    public function lockOp()
+    public function lockOp($lockedBy = "common")
     {
-        $opLockFile = "/tmp/mbyte-lbops-{$this->config['module']}-op.lock";
-        file_put_contents($opLockFile, 'y');
+        file_put_contents($this->opLockFile, $lockedBy);
     }
 
     /**
@@ -732,7 +739,28 @@ STRING;
      */
     public function unlockOp()
     {
-        $opLockFile = "/tmp/mbyte-lbops-{$this->config['module']}-op.lock";
-        file_put_contents($opLockFile, 'n');
+        file_put_contents($this->opLockFile, 'n');
+    }
+
+    /**
+     * 确定是否由特定的操作来lock
+     *
+     * @param [type] $op
+     * @return void
+     */
+    public function opLockedBy($op)
+    {
+        $lockedBy = null;
+        $attempts = 0;
+        do {
+            if (file_exists($this->opLockFile)) {
+                $lockedBy = file_get_contents($this->opLockFile);
+            }
+
+            $attempts++;
+            sleep(1);
+        } while ($lockedBy == $op && $attempts <= 5);
+
+        return $lockedBy == $op;
     }
 }

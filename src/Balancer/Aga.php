@@ -177,6 +177,10 @@ class Aga extends Abs
      */
     public function getAllNodes($allInfo = false)
     {
+        if(!$this->config['aga_arns']){
+            return [];
+        }
+
         $agaArn = reset($this->config['aga_arns']);
 
         //找到第一个listener
@@ -259,6 +263,10 @@ class Aga extends Abs
      */
     public function getNodesByRegion($region, $allInfo = false)
     {
+        if(!$this->config['aga_arns']){
+            return [];
+        }
+        
         $agaArn = reset($this->config['aga_arns']);
 
         //找到第一个listener

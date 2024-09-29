@@ -23,7 +23,7 @@ class Lbops extends Basic
             return;
         }
 
-        $this->lockOp();
+        $this->lockOp("deploy");
 
         $startTime = time();
 
@@ -287,7 +287,16 @@ class Lbops extends Basic
             return;
         }
 
-        $this->lockOp();
+        $this->lockOp("clean");
+
+        //确定只有locked by clean
+        if (!$this->opLockedBy("clean")) {
+            if (file_exists($this->opLockFile)) {
+                $lockedBy = file_get_contents($this->opLockFile);
+                Log::info("locked by another op: {$lockedBy}, skip");
+            }
+            return;
+        }
 
         Log::info("### start clean module `{$this->config['module']}` ###");
         sleep(5);
@@ -417,7 +426,7 @@ class Lbops extends Basic
 
         //从route 53查询现有版本
         if ($this->config['aga_arns']) {
-            //优先用route53
+            //优先用aga
             $currentVersion = $this->aga->getCurrentVersion();
         } else {
             $currentVersion = $this->route53->getCurrentVersion();
@@ -427,7 +436,7 @@ class Lbops extends Basic
             return;
         }
 
-        $this->lockOp();
+        $this->lockOp("scale-out");
 
         Log::info("### scale out in region:{$region}, version: {$currentVersion}, amount: {$amount} ###");
         sleep(5);
@@ -514,10 +523,10 @@ class Lbops extends Basic
         Log::info("scale-in in region:{$region}, amount: {$amount}");
 
         $nodesList = [];
-        if ($this->config['r53_zones']) {
-            $nodesList = $this->route53->getNodesByRegion($region, true);
-        } else {
+        if ($this->config['aga_arns']) {
             $nodesList = $this->aga->getNodesByRegion($region, true);
+        } else {
+            $nodesList = $this->route53->getNodesByRegion($region, true);
         }
 
         //删除，需要统一删除，保持route53个aga的一致性
@@ -535,7 +544,7 @@ class Lbops extends Basic
             return;
         }
 
-        $this->lockOp();
+        $this->lockOp("scale-in");
 
         Log::info("remaining nodes in {$region}: " . json_encode($nodesList, JSON_UNESCAPED_SLASHES));
 
@@ -651,7 +660,7 @@ class Lbops extends Basic
             return;
         }
 
-        $this->lockOp();
+        $this->lockOp("scale-up");
 
         Log::info("### scale up in region:{$region}, amount: {$amount}, version: {$currentVersion}, current instance type: {$insType}, target instance type: {$targetInsType} ###");
 
@@ -676,6 +685,10 @@ class Lbops extends Basic
 
         if ($this->config['r53_zones']) {
             //用旧eip
+            if (!$r53RegionalNodes) {
+                $r53RegionalNodes = $this->route53->getNodesByRegion($region, true);
+            }
+
             foreach ($r53RegionalNodes as $idx => $rnode) {
                 //直接用旧的eip重新关联ec2即可，无需更改route53
                 $oldEIP = $rnode['ipv4'];
@@ -784,7 +797,7 @@ class Lbops extends Basic
             return;
         }
 
-        $this->lockOp();
+        $this->lockOp("scale-down");
 
         Log::info("### scale down in region:{$region}, amount: {$amount}, version: {$currentVersion}, current instance type: {$insType}, target instance type: {$targetInsType} ###");
 
@@ -809,6 +822,11 @@ class Lbops extends Basic
 
         if ($this->config['r53_zones']) {
             //用旧eip
+
+            if (!$r53RegionalNodes) {
+                $r53RegionalNodes = $this->route53->getNodesByRegion($region, true);
+            }
+
             foreach ($r53RegionalNodes as $idx => $rnode) {
                 //直接用旧的eip重新关联ec2即可，无需更改route53
                 $oldEIP = $rnode['ipv4'];
@@ -857,12 +875,12 @@ class Lbops extends Basic
 
         $startTime = time();
 
-        if ($this->config['r53_zones']) {
-            //用route53中的ip作为监控目标
-            $regionNodes = $this->route53->getAllNodes(true);
-        } else {
+        if ($this->config['aga_arns']) {
             //用aga中的ip作为监控目标
             $regionNodes = $this->aga->getAllNodes(true);
+        } else {
+            //用route53中的ip作为监控目标
+            $regionNodes = $this->route53->getAllNodes(true);
         }
 
         list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
@@ -981,12 +999,12 @@ class Lbops extends Basic
 
         $startTime = time();
 
-        if ($this->config['r53_zones']) {
-            //用route53中的ip作为监控目标
-            $regionNodes = $this->route53->getAllNodes(true);
-        } else {
+        if ($this->config['aga_arns']) {
             //用aga中的ip作为监控目标
             $regionNodes = $this->aga->getAllNodes(true);
+        } else {
+            //用route53中的ip作为监控目标
+            $regionNodes = $this->route53->getAllNodes(true);
         }
 
         $cwClient = new \Aws\CloudWatch\CloudWatchClient(array_merge($this->defaultAwsConfig, [
