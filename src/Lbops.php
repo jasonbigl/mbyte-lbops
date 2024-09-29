@@ -336,6 +336,19 @@ class Lbops extends Basic
                 }
             }
 
+            if ($this->config['aga_arns'] && $this->config['r53_zones']) {
+                //两者都有的时间，取交集，测试一下是否有不一样的配置
+                $intersectInsIds = array_intersect($agaResvInsIds, $r53ResvInsIds);
+                if (count($intersectInsIds) != count($agaResvInsIds) || count($intersectInsIds) != count($r53ResvInsIds)) {
+                    Log::error("the instance id in aga and route 53 is different");
+                }
+
+                $intersectIps = array_intersect($agaResvIps, $r53ResvIps);
+                if (count($intersectIps) != count($agaResvIps) || count($intersectIps) != count($r53ResvIps)) {
+                    Log::error("the ip in aga and route 53 is different");
+                }
+            }
+
             if ($exceptIpList) {
                 Log::info("except ip list:" . implode(',', $exceptIpList));
             }
@@ -1019,7 +1032,7 @@ class Lbops extends Basic
             //低负载节点
             $lowLoadNodes = 0;
 
-            $currentCPUTotal = $lastCPUTotal = 0;
+            $currentCPUTotal = 0;
 
             foreach ($nodeList as $node) {
                 $insId = $node['ins_id'];
@@ -1034,7 +1047,7 @@ class Lbops extends Basic
                                 'Value' => $insId
                             ],
                         ],
-                        'StartTime' => $nowTs - (6 * $this->config['auto_scale_cpu_metric']['filter']['Period']), //最近6个节点数据
+                        'StartTime' => $nowTs - (12 * $this->config['auto_scale_cpu_metric']['filter']['Period']),
                         'EndTime' => $nowTs,
                         'Statistics' => ['Average'],
                         'Unit' => 'Percent'
@@ -1045,7 +1058,6 @@ class Lbops extends Basic
                 }
 
                 $dataPoints = $ret['Datapoints'];
-
                 //倒序，最近的就是第一个
                 usort($dataPoints, function ($a, $b) {
                     if ($a['Timestamp'] == $b['Timestamp']) {
@@ -1054,48 +1066,51 @@ class Lbops extends Basic
                     return ($a['Timestamp'] < $b['Timestamp']) ? 1 : -1;
                 });
 
+                //取最近的6个数据点
+                $dataPoints = array_slice($dataPoints, 0, 6);
+
+                //该instance的平均cpu
+                $totalCpuArr = array_column($dataPoints, 'Average');
+                $totalCpu = array_sum($totalCpuArr);
+                $currentAvgCpu = number_format($totalCpu / count($totalCpuArr), 2, '.', '');
+
+                //加到总cpu
+                $currentCPUTotal += $currentAvgCpu;
+
                 //debug log
-                //Log::info("nodes metrics in {$region}: " . json_encode($dataPoints, JSON_UNESCAPED_SLASHES));
+                //Log::info("nodes metrics in {$region}, datapoints:" . count($totalCpuArr) . ", total datapoints cpu: {$totalCpu}%, avg cpu: {$currentAvgCpu}% ");
 
-                $currentCPU = $dataPoints[0]['Average'] ?? 0;
-
-                $currentCPUTotal += $currentCPU;
-                $lastCPUTotal += $dataPoints[1]['Average'] ?? $currentCPU;
-
-                if ($currentCPU > 0 && $currentCPU < $this->config['auto_scale_cpu_threshold'][0]) {
+                if ($currentAvgCpu > 0 && $currentAvgCpu < $this->config['auto_scale_cpu_threshold'][0]) {
                     //缩容
                     $lowLoadNodes++;
                 }
             }
 
+            //当前地区的平均cpu
             $currentCPUAvg = $currentCPUTotal / $totalNodes;
-            $lastCPUAvg = $lastCPUTotal / $totalNodes;
 
             //debug log
-            //Log::info("nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%");
-
-            //提升幅度
-            $increaseRate = $lastCPUAvg > 0 ? $currentCPUAvg / $lastCPUAvg : 0;
+            //Log::info("nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%");
 
             $scaleLargeFlagFile = "/tmp/mbyte-lbops-{$this->config['module']}-scale-large.flag";
             $lastScalelargeTime = file_exists($scaleLargeFlagFile) ? file_get_contents($scaleLargeFlagFile) : 0;
             if (time() - $lastScalelargeTime > 300 && $currentCPUAvg > $this->config['auto_scale_cpu_threshold'][1]) {
                 //扩容（要快），需要记录上次扩容至少5分钟，方便新扩容的机器生效
-                Log::info("start scale up, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][1]}%");
+                Log::info("start scale up, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, nodes: {$totalNodes}, threshold: {$this->config['auto_scale_cpu_threshold'][1]}%");
 
                 $content = <<<STRING
-<p><strong>nodes in {$region} is on high load, current avg. cpu {$currentCPUAvg}%</strong><p>
+<p><strong>nodes in {$region} is on high load, current avg. cpu {$currentCPUAvg}%, nodes: {$totalNodes}</strong><p>
 <p>Start scale up<p>
 STRING;
-                $this->sendAlarmEmail('High cpu load, start scale up', $content);
+                $this->sendAlarmEmail("High cpu load {$currentCPUAvg}%, start scale up", $content);
 
                 $this->scaleUp($region);
 
                 $content = <<<STRING
-<p><strong>nodes in {$region} is on high load, current avg. cpu {$currentCPUAvg}%</strong><p>
+<p><strong>nodes in {$region} is on high load, current avg. cpu {$currentCPUAvg}%, nodes: {$totalNodes}</strong><p>
 <p>End scale up<p>
 STRING;
-                $this->sendAlarmEmail('High cpu load, end scale up', $content);
+                $this->sendAlarmEmail("High cpu load {$currentCPUAvg}%, end scale up", $content);
 
                 file_put_contents($scaleLargeFlagFile, time());
             }
@@ -1111,7 +1126,7 @@ STRING;
                 $lastScalesmallTime = file_exists($scaleSmallFlagFile) ? file_get_contents($scaleSmallFlagFile) : 0;
                 if (time() - $lastScalesmallTime > 1800 && $insType != $this->verticalScaleInstypes[0]) {
                     //不是最小的，缩容
-                    Log::info("start scale down, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
+                    Log::info("start scale down, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
 
                     $content = <<<STRING
 <p><strong>nodes in {$region} is on low load, current avg. cpu {$currentCPUAvg}%</strong><p>
@@ -1135,7 +1150,7 @@ STRING;
 
                 if (time() - $lastScalesmallTime > 1800 && $totalNodes > 1) {
                     //距离上次scale down/in超过半小时，尝试scale in
-                    Log::info("start scale in, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, last avg. cpu: {$lastCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
+                    Log::info("start scale in, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
 
                     $content = <<<STRING
 <p><strong>nodes in {$region} is on low load, current avg. cpu {$currentCPUAvg}%</strong><p>
