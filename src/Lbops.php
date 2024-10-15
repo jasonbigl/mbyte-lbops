@@ -25,6 +25,15 @@ class Lbops extends Basic
 
         $this->lockOp("deploy");
 
+        //确定只有locked by self
+        if (!$this->opLockedBy("deploy")) {
+            if (file_exists($this->opLockFile)) {
+                $lockedBy = file_get_contents($this->opLockFile);
+                Log::info("locked by another op: {$lockedBy}, skip");
+            }
+            return;
+        }
+
         $startTime = time();
 
         //当前版本和机器类型
@@ -451,6 +460,15 @@ class Lbops extends Basic
 
         $this->lockOp("scale-out");
 
+        //确定只有locked by self
+        if (!$this->opLockedBy("scale-out")) {
+            if (file_exists($this->opLockFile)) {
+                $lockedBy = file_get_contents($this->opLockFile);
+                Log::info("locked by another op: {$lockedBy}, skip");
+            }
+            return;
+        }
+
         Log::info("### scale out in region:{$region}, version: {$currentVersion}, amount: {$amount} ###");
         sleep(5);
 
@@ -558,6 +576,15 @@ class Lbops extends Basic
         }
 
         $this->lockOp("scale-in");
+
+        //确定只有locked by self
+        if (!$this->opLockedBy("scale-in")) {
+            if (file_exists($this->opLockFile)) {
+                $lockedBy = file_get_contents($this->opLockFile);
+                Log::info("locked by another op: {$lockedBy}, skip");
+            }
+            return;
+        }
 
         Log::info("remaining nodes in {$region}: " . json_encode($nodesList, JSON_UNESCAPED_SLASHES));
 
@@ -674,6 +701,15 @@ class Lbops extends Basic
         }
 
         $this->lockOp("scale-up");
+
+        //确定只有locked by self
+        if (!$this->opLockedBy("scale-up")) {
+            if (file_exists($this->opLockFile)) {
+                $lockedBy = file_get_contents($this->opLockFile);
+                Log::info("locked by another op: {$lockedBy}, skip");
+            }
+            return;
+        }
 
         Log::info("### scale up in region:{$region}, amount: {$amount}, version: {$currentVersion}, current instance type: {$insType}, target instance type: {$targetInsType} ###");
 
@@ -812,6 +848,15 @@ class Lbops extends Basic
 
         $this->lockOp("scale-down");
 
+        //确定只有locked by self
+        if (!$this->opLockedBy("scale-down")) {
+            if (file_exists($this->opLockFile)) {
+                $lockedBy = file_get_contents($this->opLockFile);
+                Log::info("locked by another op: {$lockedBy}, skip");
+            }
+            return;
+        }
+
         Log::info("### scale down in region:{$region}, amount: {$amount}, version: {$currentVersion}, current instance type: {$insType}, target instance type: {$targetInsType} ###");
 
         //启动新机器
@@ -886,14 +931,18 @@ class Lbops extends Basic
             return;
         }
 
+        if ($this->opLocked()) {
+            return;
+        }
+
         $startTime = time();
 
-        if ($this->config['aga_arns']) {
+        if ($this->config['r53_zones']) {
+            //优先用route53中的ip作为监控目标，避免aga中的机器IP再发布版本的时候变化
+            $regionNodes = $this->route53->getAllNodes(true);
+        } else {
             //用aga中的ip作为监控目标
             $regionNodes = $this->aga->getAllNodes(true);
-        } else {
-            //用route53中的ip作为监控目标
-            $regionNodes = $this->route53->getAllNodes(true);
         }
 
         list($healthCheckDomain, $healthCheckPath) = explode('/', $this->config['health_check'], 2);
@@ -1007,17 +1056,21 @@ class Lbops extends Basic
             return;
         }
 
+        if ($this->opLocked()) {
+            return;
+        }
+
         //debug log
         //Log::info("start watching auto scale");
 
         $startTime = time();
 
-        if ($this->config['aga_arns']) {
+        if ($this->config['r53_zones']) {
+            //优先用route53中的ip作为监控目标，避免发布版本的时候aga中的机器发生变化
+            $regionNodes = $this->route53->getAllNodes(true);
+        } else {
             //用aga中的ip作为监控目标
             $regionNodes = $this->aga->getAllNodes(true);
-        } else {
-            //用route53中的ip作为监控目标
-            $regionNodes = $this->route53->getAllNodes(true);
         }
 
         $cwClient = new \Aws\CloudWatch\CloudWatchClient(array_merge($this->defaultAwsConfig, [
