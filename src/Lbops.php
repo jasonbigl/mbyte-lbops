@@ -951,6 +951,10 @@ class Lbops extends Basic
             $unhealthyNodes = [];
 
             foreach ($nodeList as $node) {
+                if ($this->opLocked()) {
+                    return;
+                }
+
                 $nodeIp = $node['ipv4'];
 
                 //不健康的次数
@@ -1057,6 +1061,17 @@ class Lbops extends Basic
         }
 
         if ($this->opLocked()) {
+            return;
+        }
+
+        $this->lockOp("auto-scale");
+
+        //确定只有locked by self
+        if (!$this->opLockedBy("auto-scale")) {
+            if (file_exists($this->opLockFile)) {
+                $lockedBy = file_get_contents($this->opLockFile);
+                Log::info("locked by another op: {$lockedBy}, skip");
+            }
             return;
         }
 
