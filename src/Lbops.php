@@ -1060,21 +1060,6 @@ class Lbops extends Basic
             return;
         }
 
-        if ($this->opLocked()) {
-            return;
-        }
-
-        $this->lockOp("auto-scale");
-
-        //确定只有locked by self
-        if (!$this->opLockedBy("auto-scale")) {
-            if (file_exists($this->opLockFile)) {
-                $lockedBy = file_get_contents($this->opLockFile);
-                Log::info("locked by another op: {$lockedBy}, skip");
-            }
-            return;
-        }
-
         //debug log
         //Log::info("start watching auto scale");
 
@@ -1238,8 +1223,6 @@ STRING;
                 }
             }
         }
-
-        $this->unlockOp();
 
         $usedTime = time() - $startTime;
 
