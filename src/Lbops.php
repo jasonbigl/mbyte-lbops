@@ -1239,6 +1239,8 @@ STRING;
             }
         }
 
+        $this->unlockOp();
+
         $usedTime = time() - $startTime;
 
         //debug log
