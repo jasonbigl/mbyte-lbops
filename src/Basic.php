@@ -254,20 +254,14 @@ STRING;
             'version' => '2016-11-15'
         ]));
 
-        //wait until instance is not pending
-        Log::info("wait until instance {$instanceId} is not pending...");
+        //wait until instance is running
+        Log::info("wait until instance {$instanceId} is running...");
 
-        try {
-            $ec2State = $ec2Client->describeInstanceStatus([
-                'IncludeAllInstances' => true,
-                'InstanceIds' => [$instanceId],
-            ]);
-        } catch (\Throwable $th) {
-            Log::error($th->getMessage());
-        }
-        $ec2State = $ec2State['InstanceStatuses'][0]['InstanceState']['Name'] ?? '';
         $startTime = time();
-        while ($ec2State && $ec2State == 'pending' && time() - $startTime <= 30) {
+
+        $ec2State = null;
+        do {
+
             sleep(1);
 
             try {
@@ -277,9 +271,12 @@ STRING;
                 ]);
             } catch (\Throwable $th) {
                 Log::error($th->getMessage());
+                continue;
             }
-            $ec2State = $ec2State['InstanceStatuses'][0]['InstanceState']['Name'];
-        }
+
+            $ec2State = $ec2State['InstanceStatuses'][0]['InstanceState']['Name']??'';
+
+        } while ($ec2State != 'running' && time() - $startTime <= 30);
 
         Log::info("instance {$instanceId} ready, state: {$ec2State}");
 
