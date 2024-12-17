@@ -29,7 +29,7 @@ class Lbops extends Basic
         if (!$this->opLockedBy("deploy")) {
             if (file_exists($this->opLockFile)) {
                 $lockedBy = file_get_contents($this->opLockFile);
-                Log::info("locked by another op: {$lockedBy}, skip");
+                Log::info("trying deploy but locked by another op: {$lockedBy}, skip");
             }
             return;
         }
@@ -302,7 +302,7 @@ class Lbops extends Basic
         if (!$this->opLockedBy("clean")) {
             if (file_exists($this->opLockFile)) {
                 $lockedBy = file_get_contents($this->opLockFile);
-                Log::info("locked by another op: {$lockedBy}, skip");
+                Log::info("trying clean but locked by another op: {$lockedBy}, skip");
             }
             return;
         }
@@ -464,7 +464,7 @@ class Lbops extends Basic
         if (!$this->opLockedBy("scale-out")) {
             if (file_exists($this->opLockFile)) {
                 $lockedBy = file_get_contents($this->opLockFile);
-                Log::info("locked by another op: {$lockedBy}, skip");
+                Log::info("trying scale out but locked by another op: {$lockedBy}, skip");
             }
             return;
         }
@@ -581,7 +581,7 @@ class Lbops extends Basic
         if (!$this->opLockedBy("scale-in")) {
             if (file_exists($this->opLockFile)) {
                 $lockedBy = file_get_contents($this->opLockFile);
-                Log::info("locked by another op: {$lockedBy}, skip");
+                Log::info("trying scale in but locked by another op: {$lockedBy}, skip");
             }
             return;
         }
@@ -706,7 +706,7 @@ class Lbops extends Basic
         if (!$this->opLockedBy("scale-up")) {
             if (file_exists($this->opLockFile)) {
                 $lockedBy = file_get_contents($this->opLockFile);
-                Log::info("locked by another op: {$lockedBy}, skip");
+                Log::info("trying scale up but locked by another op: {$lockedBy}, skip");
             }
             return;
         }
@@ -852,7 +852,7 @@ class Lbops extends Basic
         if (!$this->opLockedBy("scale-down")) {
             if (file_exists($this->opLockFile)) {
                 $lockedBy = file_get_contents($this->opLockFile);
-                Log::info("locked by another op: {$lockedBy}, skip");
+                Log::info("trying scale down but locked by another op: {$lockedBy}, skip");
             }
             return;
         }
@@ -1111,6 +1111,10 @@ class Lbops extends Basic
                 }
 
                 $dataPoints = $ret['Datapoints'];
+                if(!$dataPoints){
+                    continue;
+                }
+
                 //倒序，最近的就是第一个
                 usort($dataPoints, function ($a, $b) {
                     if ($a['Timestamp'] == $b['Timestamp']) {
