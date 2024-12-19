@@ -709,10 +709,10 @@ STRING;
      *
      * @return boolean
      */
-    public function opLocked()
+    public function opLocked($currentOp = '')
     {
         if (file_exists($this->opLockFile) && file_get_contents($this->opLockFile) != 'n') {
-            Log::info("lbops has been locked by another operation: " . file_get_contents($this->opLockFile) . ", skip");
+            Log::info("trying {$currentOp} but lbops has been locked by another operation: " . file_get_contents($this->opLockFile) . ", skip");
             return true;
         }
 

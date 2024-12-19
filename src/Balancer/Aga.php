@@ -690,7 +690,7 @@ class Aga extends Abs
 
         $isDeployed = false;
 
-        while (!$isDeployed && $counter <= 20) {
+        while (!$isDeployed && $counter <= 60) {
             $counter++;
             sleep(5);
 

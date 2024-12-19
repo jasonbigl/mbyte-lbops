@@ -19,7 +19,7 @@ class Lbops extends Basic
      */
     public function deploy($version, $allocateNewEIP = false, $targetRegion = null)
     {
-        if ($this->opLocked()) {
+        if ($this->opLocked('deploy')) {
             return;
         }
 
@@ -292,7 +292,7 @@ class Lbops extends Basic
             }
         }
 
-        if ($this->opLocked()) {
+        if ($this->opLocked('clean')) {
             return;
         }
 
@@ -454,7 +454,7 @@ class Lbops extends Basic
             $currentVersion = $this->route53->getCurrentVersion();
         }
 
-        if ($this->opLocked()) {
+        if ($this->opLocked('scale out')) {
             return;
         }
 
@@ -571,7 +571,7 @@ class Lbops extends Basic
             return;
         }
 
-        if ($this->opLocked()) {
+        if ($this->opLocked('scale in')) {
             return;
         }
 
@@ -696,7 +696,7 @@ class Lbops extends Basic
             return;
         }
 
-        if ($this->opLocked()) {
+        if ($this->opLocked('scale up')) {
             return;
         }
 
@@ -842,7 +842,7 @@ class Lbops extends Basic
             return;
         }
 
-        if ($this->opLocked()) {
+        if ($this->opLocked('scale down')) {
             return;
         }
 
@@ -931,7 +931,7 @@ class Lbops extends Basic
             return;
         }
 
-        if ($this->opLocked()) {
+        if ($this->opLocked('monitor')) {
             return;
         }
 
@@ -951,7 +951,7 @@ class Lbops extends Basic
             $unhealthyNodes = [];
 
             foreach ($nodeList as $node) {
-                if ($this->opLocked()) {
+                if ($this->opLocked('monitor')) {
                     return;
                 }
 
