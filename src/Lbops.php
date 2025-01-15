@@ -272,21 +272,20 @@ class Lbops extends Basic
     /**
      * 清理机器
      *
-     * @param boolean $ignoreRoute53DeployTime 是否忽略route53的发布时间
+     * @param boolean $ignoreDeployTimeLock 是否忽略发布时间
      * @return void
      */
-    public function clean($ignoreRoute53DeployTime = false, $exceptIpList = [], $exceptInsidList = [])
+    public function clean($ignoreDeployTimeLock = false, $exceptIpList = [], $exceptInsidList = [])
     {
-        if ($this->config['r53_zones'] && !$ignoreRoute53DeployTime) {
+        if (!$ignoreDeployTimeLock) {
             //wait at least 40 minutes if route53
             //获取上次发布时间
             $lastDeployDatetime = $this->route53->getLastDeployDateTime();
             if ($lastDeployDatetime) {
                 $lastDeployTimestamp = \DateTime::createFromFormat('Y-m-d H:i:s', $lastDeployDatetime, new \DateTimeZone('Asia/Shanghai'))->getTimestamp();
 
-                if (time() - $lastDeployTimestamp <= 2400) {
-                    //less then 40 minutes
-                    Log::error("the last route 53 deployment is less then 40 minutes, skip clean");
+                if (time() - $lastDeployTimestamp < 3600) {
+                    //less then 1 hour
                     return;
                 }
             }
@@ -346,7 +345,7 @@ class Lbops extends Basic
             }
 
             if ($this->config['aga_arns'] && $this->config['r53_zones']) {
-                //两者都有的时间，取交集，测试一下是否有不一样的配置
+                //两者都有的，取交集，测试一下是否有不一样的配置
                 $intersectInsIds = array_intersect($agaResvInsIds, $r53ResvInsIds);
                 if (count($intersectInsIds) != count($agaResvInsIds) || count($intersectInsIds) != count($r53ResvInsIds)) {
                     Log::error("the instance id in aga and route 53 is different");
