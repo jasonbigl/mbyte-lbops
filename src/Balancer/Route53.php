@@ -87,7 +87,7 @@ class Route53 extends Abs
     /**
      * 获取上次部署的时间
      */
-    function getLastDeployDateTime()
+    function getLastChangeDateTime()
     {
         if (!$this->config['r53_zones']) {
             return '';
@@ -109,20 +109,20 @@ class Route53 extends Abs
         }
 
         $tags = $ret['ResourceTagSet']['Tags'] ?? [];
-        $lastDeployTime = null;
+        $lastChangeTime = null;
         foreach ($tags as $tag) {
-            if ($tag['Key'] == "{$this->config['module']}:Deploy DateTime") {
-                $lastDeployTime = $tag['Value'];
+            if ($tag['Key'] == "{$this->config['module']}:Last Change DateTime") {
+                $lastChangeTime = $tag['Value'];
                 break;
             }
         }
 
-        if (!$lastDeployTime) {
-            Log::error("No deploy datetime in route53 tag");
+        if (!$lastChangeTime) {
+            Log::error("No Last Change datetime in route53 tag");
             return '';
         }
 
-        return $lastDeployTime;
+        return $lastChangeTime;
     }
 
     /**
@@ -132,7 +132,7 @@ class Route53 extends Abs
      * @param [type] $eipv6
      * @return void
      */
-    public function updateTags($deployedVersion)
+    public function updateTags($deployedVersion = null)
     {
         if (!$this->config['r53_zones']) {
             return;
@@ -145,10 +145,10 @@ class Route53 extends Abs
         $now = new \DateTime('now', new \DateTimeZone('Asia/Shanghai'));
         $deployDatetime = $now->format('Y-m-d H:i:s');
 
-        $removeTagKeys = ["{$this->config['module']}:Deploy DateTime"];
+        $removeTagKeys = ["{$this->config['module']}:Last Change DateTime"];
         $addTags = [
             [
-                'Key' => "{$this->config['module']}:Deploy DateTime",
+                'Key' => "{$this->config['module']}:Last Change DateTime",
                 'Value' => $deployDatetime,
             ]
         ];

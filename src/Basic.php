@@ -211,7 +211,7 @@ STRING;
                                 'Value' => $this->config['module'],
                             ],
                             [
-                                'Key' => 'Deploy DateTime',
+                                'Key' => 'Last Change DateTime',
                                 'Value' => $deployDatetime,
                             ],
                             [
@@ -458,7 +458,7 @@ STRING;
                                 'Value' => $this->config['module'],
                             ],
                             [
-                                'Key' => 'Deploy DateTime',
+                                'Key' => 'Last Change DateTime',
                                 'Value' => $deployDatetime,
                             ],
                             [

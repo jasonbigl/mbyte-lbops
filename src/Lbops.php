@@ -280,11 +280,17 @@ class Lbops extends Basic
         if (!$ignoreDeployTimeLock) {
             //wait at least 40 minutes if route53
             //获取上次发布时间
-            $lastDeployDatetime = $this->route53->getLastDeployDateTime();
-            if ($lastDeployDatetime) {
-                $lastDeployTimestamp = \DateTime::createFromFormat('Y-m-d H:i:s', $lastDeployDatetime, new \DateTimeZone('Asia/Shanghai'))->getTimestamp();
+            $lastChangeDatetime = null;
+            if ($this->config['aga_arns']) {
+                $lastChangeDatetime = $this->aga->getLastChangeDateTime();
+            }else{
+                $lastChangeDatetime = $this->route53->getLastChangeDateTime();
+            }
+            
+            if ($lastChangeDatetime) {
+                $lastChangeTimestamp = \DateTime::createFromFormat('Y-m-d H:i:s', $lastChangeDatetime, new \DateTimeZone('Asia/Shanghai'))->getTimestamp();
 
-                if (time() - $lastDeployTimestamp < 3600) {
+                if (time() - $lastChangeTimestamp < 3600) {
                     //less then 1 hour
                     return;
                 }
@@ -527,10 +533,12 @@ class Lbops extends Basic
 
         if ($this->config['r53_zones'] && $newIpList) {
             $this->route53->addNodes($region, $newIpList);
+            $this->route53->updateTags();
         }
 
         if ($this->config['aga_arns'] && $newInsIdList) {
             $this->aga->addNodes($region, $newInsIdList);
+            $this->aga->updateTags();
         }
 
         $this->unlockOp();
@@ -589,6 +597,7 @@ class Lbops extends Basic
 
         if ($this->config['r53_zones']) {
             $this->route53->replaceNodes($region, array_column($nodesList, 'ipv4'));
+            $this->route53->updateTags();
         }
 
         if ($this->config['aga_arns']) {
@@ -618,6 +627,8 @@ class Lbops extends Basic
 
                 Log::info("aga updated successfully in {$region} : " . implode(',', $insIdList));
             }
+
+            $this->aga->updateTags();
         }
 
         $this->unlockOp();
@@ -759,11 +770,14 @@ class Lbops extends Basic
                     Log::error("Failed to associate EIP {$oldEIP} with instance {$newInsId}");
                 }
             }
+
+            $this->route53->updateTags();
         }
 
         if ($this->config['aga_arns']) {
             $insIds = array_column($insList, 'ins_id');
             $this->aga->replaceNodes($region, $insIds);
+            $this->aga->updateTags();
         }
 
         $this->unlockOp();
@@ -906,11 +920,15 @@ class Lbops extends Basic
                     Log::error("Failed to associate EIP {$oldEIP} with instance {$newInsId}");
                 }
             }
+
+            $this->route53->updateTags();
         }
 
         if ($this->config['aga_arns']) {
             $insIds = array_column($insList, 'ins_id');
             $this->aga->replaceNodes($region, $insIds);
+
+            $this->aga->updateTags();
         }
 
         $this->unlockOp();

@@ -8,7 +8,7 @@ abstract class Abs
     abstract public function getCurrentVersion();
 
     //获取上次部署的时间
-    abstract public function getLastDeployDateTime();
+    abstract public function getLastChangeDateTime();
 
     //部署完成后更新tag
     abstract public function updateTags($version);

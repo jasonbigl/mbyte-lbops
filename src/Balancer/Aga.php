@@ -85,7 +85,7 @@ class Aga extends Abs
     /**
      * 获取上次部署的时间
      */
-    function getLastDeployDateTime()
+    function getLastChangeDateTime()
     {
         if (!$this->config['aga_arns']) {
             return '';
@@ -104,20 +104,20 @@ class Aga extends Abs
         }
 
         $tags = $ret['Tags'] ?? [];
-        $lastDeployTime = null;
+        $lastChangeTime = null;
         foreach ($tags as $tag) {
-            if ($tag['Key'] == "{$this->config['module']}:Deploy DateTime") {
-                $lastDeployTime = $tag['Value'];
+            if ($tag['Key'] == "{$this->config['module']}:Last Change DateTime") {
+                $lastChangeTime = $tag['Value'];
                 break;
             }
         }
 
-        if (!$lastDeployTime) {
-            Log::error("No deploy datetime in aga tag");
+        if (!$lastChangeTime) {
+            Log::error("No Last Change datetime in aga tag");
             return '';
         }
 
-        return $lastDeployTime;
+        return $lastChangeTime;
     }
 
     /**
@@ -136,10 +136,10 @@ class Aga extends Abs
         $now = new \DateTime('now', new \DateTimeZone('Asia/Shanghai'));
         $deployDatetime = $now->format('Y-m-d H:i:s');
 
-        $removeTagKeys = ["{$this->config['module']}:Deploy DateTime"];
+        $removeTagKeys = ["{$this->config['module']}:Last Change DateTime"];
         $addTags = [
             [
-                'Key' => "{$this->config['module']}:Deploy DateTime",
+                'Key' => "{$this->config['module']}:Last Change DateTime",
                 'Value' => $deployDatetime,
             ]
         ];
