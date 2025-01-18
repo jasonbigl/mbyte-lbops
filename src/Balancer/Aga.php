@@ -509,7 +509,7 @@ class Aga extends Abs
         $counter = 1;
         $isHealthy = false;
 
-        while (!$isHealthy && $counter <= 20) {
+        while (!$isHealthy && $counter <= 60) {
 
             $epgInfo = $this->findEndpointGroupByRegion($agaListenerArn, $region);
 

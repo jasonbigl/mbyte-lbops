@@ -276,7 +276,7 @@ STRING;
 
             $ec2State = $ec2State['InstanceStatuses'][0]['InstanceState']['Name']??'';
 
-        } while ($ec2State != 'running' && time() - $startTime <= 30);
+        } while ($ec2State != 'running' && time() - $startTime <= 60);
 
         Log::info("instance {$instanceId} ready, state: {$ec2State}");
 
