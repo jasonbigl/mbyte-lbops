@@ -160,7 +160,7 @@ class Basic
      * @param [type] $regionAttr
      * @return void
      */
-    public function launchEc2($region, $version, $insType)
+    public function launchEc2($region, $version, $insType, $runtimeEnv = '')
     {
         Log::info("launching ec2 instance with version {$version} in {$region}...");
 
@@ -176,7 +176,7 @@ aws s3 cp {$this->config['s3_startup_script']} /tmp/startup.sh --region={$this->
 
 chmod +x /tmp/startup.sh
 
-DEPLOY_FILE={$version}.tgz /tmp/startup.sh > /tmp/startup.log
+DEPLOY_FILE={$version}.tgz {$runtimeEnv} /tmp/startup.sh > /tmp/startup.log
 STRING;
 
         try {
@@ -274,8 +274,7 @@ STRING;
                 continue;
             }
 
-            $ec2State = $ec2State['InstanceStatuses'][0]['InstanceState']['Name']??'';
-
+            $ec2State = $ec2State['InstanceStatuses'][0]['InstanceState']['Name'] ?? '';
         } while ($ec2State != 'running' && time() - $startTime <= 60);
 
         Log::info("instance {$instanceId} ready, state: {$ec2State}");
