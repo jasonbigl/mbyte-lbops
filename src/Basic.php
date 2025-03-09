@@ -123,10 +123,10 @@ class Basic
      * @param string $insType
      * @return string
      */
-    function launchNode($region, $version, $insType = 't4g.small')
+    function launchNode($region, $version, $insType = 't4g.small', $startupEnv = '')
     {
         #create instance
-        $instance = $this->launchEc2($region, $version, $insType);
+        $instance = $this->launchEc2($region, $version, $insType, $startupEnv);
         if (!$instance) {
             return false;
         }
@@ -160,7 +160,7 @@ class Basic
      * @param [type] $regionAttr
      * @return void
      */
-    public function launchEc2($region, $version, $insType, $runtimeEnv = '')
+    public function launchEc2($region, $version, $insType, $startupEnv = '')
     {
         Log::info("launching ec2 instance with version {$version} in {$region}...");
 
@@ -176,7 +176,7 @@ aws s3 cp {$this->config['s3_startup_script']} /tmp/startup.sh --region={$this->
 
 chmod +x /tmp/startup.sh
 
-DEPLOY_FILE={$version}.tgz {$runtimeEnv} /tmp/startup.sh > /tmp/startup.log
+DEPLOY_FILE={$version}.tgz {$startupEnv} /tmp/startup.sh > /tmp/startup.log
 STRING;
 
         try {
