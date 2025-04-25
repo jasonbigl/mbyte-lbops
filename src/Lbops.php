@@ -277,26 +277,6 @@ class Lbops extends Basic
      */
     public function clean($ignoreDeployTimeLock = false, $exceptIpList = [], $exceptInsidList = [])
     {
-        // if (!$ignoreDeployTimeLock) {
-        //     //wait at least 40 minutes if route53
-        //     //获取上次发布时间
-        //     $lastChangeDatetime = null;
-        //     if ($this->config['aga_arns']) {
-        //         $lastChangeDatetime = $this->aga->getLastChangeDateTime();
-        //     }else{
-        //         $lastChangeDatetime = $this->route53->getLastChangeDateTime();
-        //     }
-
-        //     if ($lastChangeDatetime) {
-        //         $lastChangeTimestamp = \DateTime::createFromFormat('Y-m-d H:i:s', $lastChangeDatetime, new \DateTimeZone('Asia/Shanghai'))->getTimestamp();
-
-        //         if (time() - $lastChangeTimestamp < 3600) {
-        //             //less then 1 hour
-        //             return;
-        //         }
-        //     }
-        // }
-
         if ($this->opLocked('clean')) {
             return;
         }
@@ -1246,7 +1226,8 @@ STRING;
                 //重新获取一次时间，避免刚scale down完就scale in
                 $lastScalesmallTime = file_exists($scaleSmallFlagFile) ? file_get_contents($scaleSmallFlagFile) : 0;
 
-                if (time() - $lastScalesmallTime > 1800 && $totalNodes > 1) {
+                $minNodeCount = $this->config['auto_scale_min_nodes'][$region] ?? 1;
+                if (time() - $lastScalesmallTime > 1800 && $totalNodes > $minNodeCount) {
                     //距离上次scale down/in超过半小时，尝试scale in
                     Log::info("start scale in, nodes metrics in {$region}, current avg. cpu: {$currentCPUAvg}%, threshold: {$this->config['auto_scale_cpu_threshold'][0]}%");
 
