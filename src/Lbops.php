@@ -277,25 +277,25 @@ class Lbops extends Basic
      */
     public function clean($ignoreDeployTimeLock = false, $exceptIpList = [], $exceptInsidList = [])
     {
-        if (!$ignoreDeployTimeLock) {
-            //wait at least 40 minutes if route53
-            //获取上次发布时间
-            $lastChangeDatetime = null;
-            if ($this->config['aga_arns']) {
-                $lastChangeDatetime = $this->aga->getLastChangeDateTime();
-            }else{
-                $lastChangeDatetime = $this->route53->getLastChangeDateTime();
-            }
-            
-            if ($lastChangeDatetime) {
-                $lastChangeTimestamp = \DateTime::createFromFormat('Y-m-d H:i:s', $lastChangeDatetime, new \DateTimeZone('Asia/Shanghai'))->getTimestamp();
+        // if (!$ignoreDeployTimeLock) {
+        //     //wait at least 40 minutes if route53
+        //     //获取上次发布时间
+        //     $lastChangeDatetime = null;
+        //     if ($this->config['aga_arns']) {
+        //         $lastChangeDatetime = $this->aga->getLastChangeDateTime();
+        //     }else{
+        //         $lastChangeDatetime = $this->route53->getLastChangeDateTime();
+        //     }
 
-                if (time() - $lastChangeTimestamp < 3600) {
-                    //less then 1 hour
-                    return;
-                }
-            }
-        }
+        //     if ($lastChangeDatetime) {
+        //         $lastChangeTimestamp = \DateTime::createFromFormat('Y-m-d H:i:s', $lastChangeDatetime, new \DateTimeZone('Asia/Shanghai'))->getTimestamp();
+
+        //         if (time() - $lastChangeTimestamp < 3600) {
+        //             //less then 1 hour
+        //             return;
+        //         }
+        //     }
+        // }
 
         if ($this->opLocked('clean')) {
             return;
@@ -382,10 +382,22 @@ class Lbops extends Basic
                 $cleanEIPs = [];
 
                 foreach ($ret['Addresses'] as $eipAddr) {
+                    //获取发布时间
+                    $tags = $eipAddr['Tags'] ?? [];
+                    $eipLastChangeTs = 0;
+                    foreach ($tags as $tag) {
+                        if ($tag['Key'] == "Last Change DateTime") {
+                            $eipLastChangeTs = \DateTime::createFromFormat('Y-m-d H:i:s', $tag['Value'], new \DateTimeZone('Asia/Shanghai'))->getTimestamp();;
+                            break;
+                        }
+                    }
+
                     if (
                         !in_array($eipAddr['PublicIp'], $agaResvIps)
                         && !in_array($eipAddr['PublicIp'], $r53ResvIps)
                         && !in_array($eipAddr['PublicIp'], $exceptIpList)
+                        && $eipLastChangeTs > 0
+                        && time() - $eipLastChangeTs > 3600
                     ) {
                         $cleanEIPs[] = $eipAddr['PublicIp'];
                     }
@@ -419,10 +431,22 @@ class Lbops extends Basic
 
                 foreach ($ret['Reservations'] as $rv) {
                     foreach ($rv['Instances'] as $ins) {
+                        //获取发布时间
+                        $tags = $ins['Tags'] ?? [];
+                        $ec2LastChangeTs = 0;
+                        foreach ($tags as $tag) {
+                            if ($tag['Key'] == "Last Change DateTime") {
+                                $ec2LastChangeTs = \DateTime::createFromFormat('Y-m-d H:i:s', $tag['Value'], new \DateTimeZone('Asia/Shanghai'))->getTimestamp();;
+                                break;
+                            }
+                        }
+
                         if (
                             !in_array($ins['InstanceId'], $agaResvInsIds)
                             && !in_array($ins['InstanceId'], $r53ResvInsIds)
                             && !in_array($ins['InstanceId'], $exceptInsidList)
+                            && $ec2LastChangeTs > 0
+                            && time() - $ec2LastChangeTs > 3600
                         )
                             $cleanInsIds[] = $ins['InstanceId'];
                     }
@@ -1128,7 +1152,7 @@ class Lbops extends Basic
                 }
 
                 $dataPoints = $ret['Datapoints'];
-                if(!$dataPoints){
+                if (!$dataPoints) {
                     continue;
                 }
 
