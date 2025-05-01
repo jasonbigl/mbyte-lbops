@@ -572,8 +572,10 @@ class Lbops extends Basic
         }
 
         //删除，需要统一删除，保持route53个aga的一致性
+        $removedNodes = [];
         for ($i = 1; $i <= $amount; $i++) {
             $removeKey = array_rand($nodesList);
+            $removedNodes[] = $nodesList[$removeKey];
             unset($nodesList[$removeKey]);
         }
 
@@ -633,6 +635,13 @@ class Lbops extends Basic
             }
 
             $this->aga->updateTags();
+        }
+
+        //更新removed node的last change time，避免刚缩容就被清理
+        $now = new \DateTime('now', new \DateTimeZone('Asia/Shanghai'));
+        $lastChangeTime = $now->format('Y-m-d H:i:s');
+        foreach ($removedNodes as $node) {
+            $this->updateNodeLastChangeTime($region, $node['ins_id'], $lastChangeTime);
         }
 
         $this->unlockOp();

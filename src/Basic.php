@@ -534,6 +534,40 @@ STRING;
     }
 
     /**
+     * 更新node的last change time
+     */
+    function updateNodeLastChangeTime($region, $insId, $lastChangeTime)
+    {
+        $ec2Client = new \Aws\Ec2\Ec2Client(array_merge($this->defaultAwsConfig, [
+            'region' => $region,
+            'version' => '2016-11-15'
+        ]));
+
+        //先删除ec2 的tags
+        $ec2Client->deleteTags([
+            'Resources' => [$insId],
+            'Tags' => [
+                [
+                    'Key' => 'Last Change DateTime',
+                ]
+            ]
+        ]);
+
+        //再添加ec2的tags
+        $ec2Client->createTags([
+            'Resources' => [$insId],
+            'Tags' => [
+                [
+                    'Key' => 'Last Change DateTime',
+                    'Value' => $lastChangeTime,
+                ]
+            ]
+        ]);
+
+        return true;
+    }
+
+    /**
      * 清理elastic eips
      */
     function cleanEIPs($region, $cleanEIPs)
