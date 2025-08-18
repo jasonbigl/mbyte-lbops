@@ -334,12 +334,12 @@ class Lbops extends Basic
                 //两者都有的，取交集，测试一下是否有不一样的配置
                 $intersectInsIds = array_intersect($agaResvInsIds, $r53ResvInsIds);
                 if (count($intersectInsIds) != count($agaResvInsIds) || count($intersectInsIds) != count($r53ResvInsIds)) {
-                    Log::error("the instance id in aga and route 53 is different");
+                    Log::error("the instance id in aga and route 53 is different, aga: " . implode(',', $agaResvInsIds) . ", route53: " . implode(',', $r53ResvInsIds));
                 }
 
                 $intersectIps = array_intersect($agaResvIps, $r53ResvIps);
                 if (count($intersectIps) != count($agaResvIps) || count($intersectIps) != count($r53ResvIps)) {
-                    Log::error("the ip in aga and route 53 is different");
+                    Log::error("the ip in aga and route 53 is different, aga: " . implode(',', $agaResvIps) . ", route53: " . implode(',', $r53ResvIps));
                 }
             }
 
