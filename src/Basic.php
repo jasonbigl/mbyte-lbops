@@ -84,6 +84,9 @@ class Basic
             'auto_scale_cpu_threshold' => [], //缩容和扩容百分比
 
             'loggers' => [], //日志记录
+
+            'email_from' => '',
+            'email_to' => [],
         ];
 
         $this->config = array_merge($defaultConfig, $config);
@@ -695,6 +698,10 @@ STRING;
      */
     public function sendAlarmEmail($subject, $content)
     {
+        if (!$this->config['email_from'] || !$this->config['email_to']) {
+            return;
+        }
+
         $sesV2Client = new \Aws\SesV2\SesV2Client([
             'credentials' => [
                 'key' => $this->config['aws_key'],
@@ -729,11 +736,9 @@ STRING;
                 'BccAddresses' => [],
                 'CcAddresses' => [],
                 //注意这里只能用单个用户，如果用多个用户，每个用户都能看到其他收件人的地址
-                'ToAddresses' => [
-                    "Mr Lee <maxalarm@foxmail.com>",
-                ],
+                'ToAddresses' => $this->config['email_to'],
             ],
-            'FromEmailAddress' => 'Mtech Alarm <alarm@maxbytech.com>',
+            'FromEmailAddress' => $this->config['email_from'],
         ]);
     }
 
