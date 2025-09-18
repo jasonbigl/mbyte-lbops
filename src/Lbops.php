@@ -16,7 +16,7 @@ class Lbops extends Basic
      *
      * @return void
      */
-    public function deploy($version, $allocateNewEIP = false, $targetRegion = null)
+    public function deploy($version, $allocateNewEIP = false, $targetRegion = null, $insType = null)
     {
         if ($this->opLocked('deploy')) {
             return;
@@ -36,7 +36,7 @@ class Lbops extends Basic
         $startTime = time();
 
         //当前版本和机器类型
-        $insType = $currentVersion = null;
+        $currentVersion = null;
         if ($this->config['aga_arns']) {
             $currentVersion = $this->aga->getCurrentVersion();
 
@@ -45,7 +45,7 @@ class Lbops extends Basic
             $node = reset($regionNodes);
             $insId = $node['ins_id'];
             $insData = $this->describeInstance($region, $insId);
-            if ($insData) {
+            if ($insData && !$insType) {
                 $insType = $insData['InstanceType'];
             }
         } else {
@@ -58,7 +58,7 @@ class Lbops extends Basic
             $node = reset($regionNodes);
             $insIp = $node['ipv4'];
             $insData = $this->findInstanceByIP($region, $insIp);
-            if ($insData) {
+            if ($insData && !$insType) {
                 $insType = $insData['InstanceType'];
             }
         }
