@@ -9,7 +9,6 @@ class Lbops extends Basic
         't4g.small',
         'c6g.xlarge',
         'c6g.2xlarge',
-        'c6g.4xlarge',
     ];
 
     /**
@@ -700,23 +699,19 @@ class Lbops extends Basic
             return;
         }
 
-        if (!$insType) {
-            Log::error("unable to get current instance type in region {$region}");
-            return;
-        }
+        //默认升级到最大的一个类型
+        $targetInsType = end($this->verticalScaleInstypes);
 
-        $currentKey = array_search($insType, $this->verticalScaleInstypes);
-        if ($currentKey === false) {
-            Log::error("unable to find current instance type {$insType} location in types: " . implode(',', $this->verticalScaleInstypes));
-            return;
-        }
-
-        $targetKey = $currentKey + 1;
-        $targetInsType = $this->verticalScaleInstypes[$targetKey] ?? null;
-        if (!$targetInsType) {
-            //到顶了
-            Log::error("unable to get target instance type based on current type {$insType}, types: " . implode(',', $this->verticalScaleInstypes));
-            return;
+        if ($insType) {
+            $currentKey = array_search($insType, $this->verticalScaleInstypes);
+            if ($currentKey) {
+                $targetKey = $currentKey + 1;
+                $targetInsType = $this->verticalScaleInstypes[$targetKey] ?? null;
+                if (!$targetInsType) {
+                    //到顶了
+                    $targetInsType = end($this->verticalScaleInstypes);
+                }
+            }
         }
 
         if ($this->opLocked('scale up')) {
@@ -961,9 +956,10 @@ class Lbops extends Basic
             return;
         }
 
-        if ($this->opLocked('monitor')) {
-            return;
-        }
+        // monitor不看锁，避免监控的时候锁住，导致监控不及时
+        // if ($this->opLocked('monitor')) {
+        //     return;
+        // }
 
         $startTime = time();
 
@@ -981,9 +977,9 @@ class Lbops extends Basic
             $unhealthyNodes = [];
 
             foreach ($nodeList as $node) {
-                if ($this->opLocked('monitor')) {
-                    return;
-                }
+                // if ($this->opLocked('monitor')) {
+                //     return;
+                // }
 
                 $nodeIp = $node['ipv4'];
 
